@@ -75,6 +75,7 @@ var eventParseFuncMap = map[dto.OPCode]map[dto.EventType]eventParseFunc{
 
 		dto.EventInteractionCreate:    interactionHandler,
 		dto.EventGroupAtMessageCreate: groupAtMessageHandler,
+		dto.EventGroupMessageCreate:  groupMessageHandler, // [新增] 映射到新建的groupMessageHandler
 		dto.EventC2CMessageCreate:     c2cMessageHandler,
 		dto.EventGroupAddRobot:        groupaddbothandler,
 		dto.EventGroupDelRobot:        groupdelbothandler,
@@ -493,6 +494,21 @@ func c2cMsgReceiveHandler(payload *dto.WSPayload, message []byte) error {
 	}
 	if DefaultHandlers.C2CMsgReceive != nil {
 		return DefaultHandlers.C2CMsgReceive(payload, data)
+	}
+	return nil
+}
+
+// [新增] 普通群消息事件处理
+func groupMessageHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSGroupMessageData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if _, loaded := processedIDs.LoadOrStore(data.ID, struct{}{}); loaded {
+		return nil
+	}
+	if DefaultHandlers.GroupMessage != nil {
+		return DefaultHandlers.GroupMessage(payload, data)
 	}
 	return nil
 }

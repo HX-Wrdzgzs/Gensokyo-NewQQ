@@ -114,6 +114,9 @@ type WSInteractionData Interaction
 // WSGroupATMessageData 群@机器人的事件
 type WSGroupATMessageData Message
 
+// WSGroupMessageData 普通群消息事件（无需@机器人）
+type WSGroupMessageData Message
+
 // WSC2CMessageData  c2c消息事件
 type WSC2CMessageData Message
 

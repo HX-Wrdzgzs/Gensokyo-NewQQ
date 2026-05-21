@@ -39,6 +39,7 @@ const (
 	EventForumAuditResult      EventType = "FORUM_PUBLISH_AUDIT_RESULT"
 	EventInteractionCreate     EventType = "INTERACTION_CREATE"
 	EventGroupAtMessageCreate  EventType = "GROUP_AT_MESSAGE_CREATE"
+	EventGroupMessageCreate   EventType = "GROUP_MESSAGE_CREATE"   // [新增] 普通群消息事件	
 	EventC2CMessageCreate      EventType = "C2C_MESSAGE_CREATE"
 	EventGroupAddRobot         EventType = "GROUP_ADD_ROBOT"
 	EventGroupDelRobot         EventType = "GROUP_DEL_ROBOT"
@@ -60,13 +61,13 @@ var intentEventMap = map[Intent][]EventType{
 	IntentGuildMembers:  {EventGuildMemberAdd, EventGuildMemberUpdate, EventGuildMemberRemove},
 	IntentGuildMessages: {EventMessageCreate, EventMessageDelete},
 
-	// [修改] 将新的事件加入 IntentGroupMessages
 	IntentGroupMessages: {
-		EventGroupAtMessageCreate, EventC2CMessageCreate, // 原有
-		EventGroupAddRobot, EventGroupDelRobot, // 原有
-		EventGroupMsgReject, EventGroupMsgReceive, // 补全群消息开关事件
-		EventFriendAdd, EventFriendDel, // [新增] 好友添加/删除
-		EventC2CMsgReject, EventC2CMsgReceive, // [新增] C2C消息开关拒绝/接收
+		EventGroupAtMessageCreate, EventGroupMessageCreate, // [新增] EventGroupMessageCreate
+		EventC2CMessageCreate,
+		EventGroupAddRobot, EventGroupDelRobot,
+		EventGroupMsgReject, EventGroupMsgReceive,
+		EventFriendAdd, EventFriendDel,
+		EventC2CMsgReject, EventC2CMsgReceive,
 	},
 
 	IntentGuildMessageReactions: {EventMessageReactionAdd, EventMessageReactionRemove},
