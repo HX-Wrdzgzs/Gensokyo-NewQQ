@@ -9,8 +9,6 @@
 # gensokyo
 
 _✨ 基于 [OneBot](https://github.com/howmanybots/onebot/blob/master/README.md) QQ官方机器人Api Golang 原生实现 ✨_  
-# 与原项目的区别
-_✨ 使用DeepseekV4 跟进了QQ官方API与事件订阅 ✨_  
 
 </div>
 
@@ -47,14 +45,8 @@ _✨ 使用DeepseekV4 跟进了QQ官方API与事件订阅 ✨_
 
 ## 引用
 - [`tencent-connect/botgo`](https://github.com/tencent-connect/botgo): 本项目引用了此项目,并做了一些改动.
-- 本项目为Gensokyo的复刻，是基于Gensokyo的二次修改版，该修改版旨在先于Gensokyo更新QQ相关的api与推送事件
 
 ## 介绍
-关于从官版迁移至该改版
-- 目前支持从官方最新版无损迁移至该改版
-- 理论上支持从该改版无损迁移至官方最新版
-> 目前从改版迁移至官版未进行测试，请谨慎考虑
-
 gensokyo兼容 [OneBot-v11](https://github.com/botuniverse/onebot-11) ，并在其基础上做了一些扩展，详情请看 OneBot 的文档。
 
 Gensokyo文档(施工中):[起步](/docs/起步-注册QQ开放平台&启动gensokyo.md)
@@ -248,27 +240,27 @@ todo,正在施工中
 <summary>已实现 Intent</summary>
 
 #### 允许向后端推送的事件类型
-> 相较于原版新增了 **GroupMessageEventhandler** 事件
+> 新增了 **GroupMessageEventhandler** 事件
 
-| 事件名称 | 代表含义 |
-| -------- | ------- |
-| ATmessageEventHandler | 频道at消息 |
-| DirectMessageHandler | 私域频道私信(dms) |
-| ReadyHandler | 连接成功 |
-| ErrorNotifyHandler | 连接关闭 |
-| GuildEventHandler | 频道事件 |
-| MemberEventHandler | 频道成员新增 |
-| ChannelEventHandler | 频道事件 |
-| CreateMessageHandler | 频道不at消息 |
-| InteractionHandler | 频道互动回应 卡片按钮data回调事件 |
-| GroupATMessageEventHandler | 群at消息 |
-| GroupMessageEventhandler | 群普通消息 |
-| C2CMessageEventHandler | 群私聊 |
-| ThreadEventHandler | 频道发帖事件 |
-| FriendAddEventHandler | 被添加好友 |
-| FriendDelEventHandler | 被删除好友 |
-| C2CMsgRejectHandler | 用户拒绝(C2C)消息推送 |
-| C2CMsgReceiveHandler | 用户同意(C2C)消息推送 |
+| 事件名称                   | 代表含义                         |
+| --------------------------- | ------------------------------- |
+| ATmessageEventHandler      | [频道at消息]                       |
+| DirectMessageHandler       | [私域频道私信(dms)]                |
+| ReadyHandler               | [连接成功]                         |
+| ErrorNotifyHandler         | [连接关闭]                         |
+| GuildEventHandler          | [频道事件]                         |
+| MemberEventHandler         | [频道成员新增]                     |
+| ChannelEventHandler        | [频道事件]                         |
+| CreateMessageHandler       | [频道不at消息]                     |
+| InteractionHandler         | [频道卡片按钮data回调事件] |
+| GroupATMessageEventHandler | [群at消息]                         |
+| GroupMessageEventhandler   | [群普通消息]                       |
+| C2CMessageEventHandler     | [群私聊]                           |
+| ThreadEventHandler         | [频道发帖事件]                     |
+| FriendAddEventHandler      | [被添加好友]                       |
+| FriendDelEventHandler      | [被删除好友]                       |                 
+| C2CMsgRejectHandler        | [用户拒绝(C2C)消息推送]             |
+| C2CMsgReceiveHandler       | [用户同意(C2C)消息推送]             |
 
 
 </details>
