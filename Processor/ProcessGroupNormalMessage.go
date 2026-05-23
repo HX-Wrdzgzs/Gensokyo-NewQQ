@@ -190,6 +190,8 @@ func (p *Processors) ProcessGroupNormalMessage(data *dto.WSGroupMessageData) err
 		if CaN := config.GetCardAndNick(); CaN != "" {
 			groupMsg.Sender.Nickname = CaN
 			groupMsg.Sender.Card = CaN
+		} else if data.Author.Username != "" {
+			groupMsg.Sender.Nickname = data.Author.Username
 		}
 		if config.GetTwoWayEcho() {
 			groupMsg.Echo = echostr
@@ -258,6 +260,8 @@ func (p *Processors) ProcessGroupNormalMessage(data *dto.WSGroupMessageData) err
 		if CaN := config.GetCardAndNick(); CaN != "" {
 			groupMsgS.Sender.Nickname = CaN
 			groupMsgS.Sender.Card = CaN
+		} else if data.Author.Username != "" {
+			groupMsgS.Sender.Nickname = data.Author.Username
 		}
 		if config.GetTwoWayEcho() {
 			groupMsgS.Echo = echostr
