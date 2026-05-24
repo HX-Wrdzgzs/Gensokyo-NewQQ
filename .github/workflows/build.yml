@@ -156,17 +156,17 @@ jobs:
       - name: Extract release notes from CHANGELOG
         run: |
           SECTION="${{ steps.release_num.outputs.name }}"
-          python3 -c "
+          python3 << EOF > release-notes.md
 import re, sys
 with open('CHANGELOG.md') as f:
     content = f.read()
 pattern = r'## ' + re.escape('$SECTION') + r'(.*?)(?=## |\Z)'
 match = re.search(pattern, content, re.DOTALL)
 if match:
-    sys.stdout.write(match.group())
+    print(match.group())
 else:
     print('（请更新 CHANGELOG.md）')
-" > release-notes.md
+EOF
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
