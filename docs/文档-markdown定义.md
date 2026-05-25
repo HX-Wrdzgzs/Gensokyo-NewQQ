@@ -1,11 +1,9 @@
-```markdown
 ## md cq码/segment格式
 
 ### CQ码格式
 
-```markdown
 [CQ:markdown,data=xxx]
-```
+
 
 推荐使用模板：[链接到模板](https://github.com/hoshinonyaruko/gensokyo-qqmd)
 
@@ -148,7 +146,6 @@
     ]
   }
 }
-```
 
 ### 图文混排格式
 
