@@ -23,7 +23,7 @@
 ```json
 {
     "data": {
-        "message": "https://q.qlogo.cn/qqapp/102848039/D8FB64288B16F160289247BA495B7233/640",
+        "message": "https://q.qlogo.cn/qqapp/[Bot实际的app_id]/[QQ下发的虚拟用户ID]/640",
         "user_id": 1234567890
     },
     "message": "",
