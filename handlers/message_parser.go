@@ -660,12 +660,14 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 				messageText += "[CQ:reply,id=" + replyID + "]"
 
 			case "active":
-				dataMap, _ := segmentMap["data"].(map[string]interface{})
-				if activeType, ok := dataMap["type"].(string); ok {
-					foundItems["active_type"] = append(foundItems["active_type"], activeType)
-				}
-				if subType, ok := dataMap["sub_type"].(string); ok {
-					foundItems["active_sub_type"] = append(foundItems["active_sub_type"], subType)
+				dataMap, ok := segmentMap["data"].(map[string]interface{})
+				if ok && dataMap != nil {
+					if activeType, ok := dataMap["type"].(string); ok {
+						foundItems["active_type"] = append(foundItems["active_type"], activeType)
+					}
+					if subType, ok := dataMap["sub_type"].(string); ok {
+						foundItems["active_sub_type"] = append(foundItems["active_sub_type"], subType)
+					}
 				}
 				// [CQ:active] 不在 messageText 中留痕
 
