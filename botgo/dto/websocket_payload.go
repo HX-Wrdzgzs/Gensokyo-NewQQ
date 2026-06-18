@@ -7,6 +7,7 @@ type EventType string
 type WSPayload struct {
 	WSPayloadBase
 	Data       interface{} `json:"d,omitempty"`
+	ID         string      `json:"id,omitempty"`
 	S          int64       `json:"s,omitempty"`
 	RawMessage []byte      `json:"-"` // 原始的 message 数据
 }
