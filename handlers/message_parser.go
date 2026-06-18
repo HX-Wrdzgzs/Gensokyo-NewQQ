@@ -722,6 +722,15 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 					mylog.Printf("Error: markdown segment data is nil.")
 				}
 
+			case "member":
+				dataMap, ok := segmentMap["data"].(map[string]interface{})
+				if ok && dataMap != nil {
+					memberType, _ := dataMap["type"].(string)
+					groupID, _ := dataMap["group_id"].(string)
+					userID, _ := dataMap["user_id"].(string)
+					messageText += fmt.Sprintf("[CQ:member,type=%s,group_id=%s,user_id=%s]", memberType, groupID, userID)
+				}
+
 			default:
 				mylog.Printf("Unhandled segment type: %s", segmentType)
 			}
