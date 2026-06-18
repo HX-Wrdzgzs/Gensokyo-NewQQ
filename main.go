@@ -875,6 +875,7 @@ func C2CMsgReceiveHandler() event.C2CMsgReceiveHandler {
 // GroupMemberAddEventHandler 实现处理 群成员新增 事件的回调
 func GroupMemberAddEventHandler() event.GroupMemberAddEventHandler {
 	return func(event *dto.WSPayload, data *dto.GroupMemberEvent) error {
+		data.EventID = event.ID
 		go p.ProcessGroupMember(data, "GROUP_MEMBER_ADD")
 		return nil
 	}
