@@ -417,13 +417,18 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 		// 优先发送文本信息
 		if messageText != "" {
 			// 处理出站 [CQ:member] → 自动转换 user_id 并设置 eventID/主动模式
-			var cqGroupID string
-			messageText, cqGroupID, _ = ProcessCQMemberOutbound(messageText, &eventID, message.Params.GroupID.(string), apiv2)
-			if cqGroupID != "" {
-				mylog.Printf("[CQ:member] 从 CQ 码中解析到 group_id=%s", cqGroupID)
+			// 返回的 realGroupID 是转换后的真实 GroupOpenID，可用作目标群
+			var realGroupID string
+			messageText, realGroupID, _ = ProcessCQMemberOutbound(messageText, &eventID, message.Params.GroupID.(string), apiv2)
+			if realGroupID != "" {
+				mylog.Printf("[CQ:member] CQ 码 group_id 已转为 OpenID=%s", realGroupID)
 			}
 
-			// 检查是否有 markdown 内容（来自 [CQ:markdown] CQ 码）
+			// 如果 CQ 码中携带了 group_id，优先使用它作为目标群（支持跨群路由）
+			targetGroupID := message.Params.GroupID.(string)
+			if realGroupID != "" {
+				targetGroupID = realGroupID
+			}
 			var md *dto.Markdown
 			if mdItems, ok := foundItems["markdown"]; ok && len(mdItems) > 0 {
 				md = parseMarkdownFromMessage(mdItems[0])

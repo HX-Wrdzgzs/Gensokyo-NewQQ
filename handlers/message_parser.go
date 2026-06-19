@@ -2139,12 +2139,13 @@ func ProcessCQActive(text string, foundItems map[string][]string) string {
 }
 
 // ProcessCQMemberOutbound 处理出站 [CQ:member,type=add/remove,group_id=虚拟群ID,user_id=虚拟用户ID]
-// 返回: (清理后的文本, CQ码中的虚拟group_id, 转换后的OpenID)
+// 返回: (清理后的文本, 转换后的真实GroupOpenID, 转换后的真实UserOpenID)
 // type=add: 使用存储的 event_id 进行被动回复
 // type=remove: 转为主动消息发送
 func ProcessCQMemberOutbound(text string, eventID *string, groupID string, apiv2 openapi.OpenAPI) (string, string, string) {
 	var cqGroupID string
 	var cqUserID string
+	var realTargetGroupID string
 	re := regexp.MustCompile(`\[CQ:member,([^\]]*)\]`)
 	result := re.ReplaceAllStringFunc(text, func(match string) string {
 		inner := match[1 : len(match)-1]
@@ -2179,13 +2180,18 @@ func ProcessCQMemberOutbound(text string, eventID *string, groupID string, apiv2
 			cqGroupID = groupID
 		}
 
+		// 将 CQ 码中的虚拟 group_id 转为真实 OpenID（作为目标群）
+		realGroupOpenID, err := idmap.RetrieveRowByIDv2(cqGroupID)
+		if err != nil || realGroupOpenID == "" {
+			mylog.Printf("[CQ:member] groupID=%s 转换为 OpenID 失败: %v", cqGroupID, err)
+			realGroupOpenID = cqGroupID
+		} else {
+			mylog.Printf("[CQ:member] groupID=%s → OpenID=%s", cqGroupID, realGroupOpenID)
+		}
+		realTargetGroupID = realGroupOpenID
+
 		switch memberType {
 		case "add":
-			realGroupOpenID, err := idmap.RetrieveRowByIDv2(cqGroupID)
-			if err != nil || realGroupOpenID == "" {
-				mylog.Printf("[CQ:member] groupID=%s 转换为 OpenID 失败: %v", cqGroupID, err)
-				realGroupOpenID = cqGroupID
-			}
 			appID := config.GetAppIDStr()
 			key := appID + "_" + realGroupOpenID
 			storedEventID := echo.GetEventIDByKey(key)
@@ -2204,7 +2210,7 @@ func ProcessCQMemberOutbound(text string, eventID *string, groupID string, apiv2
 		return ""
 	})
 
-	return result, cqGroupID, cqUserID
+	return result, realTargetGroupID, cqUserID
 }
 
 // parseMarkdownFromMessage 从 base64 编码的 markdown JSON 数据中解析 dto.Markdown
