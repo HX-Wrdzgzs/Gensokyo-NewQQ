@@ -13,19 +13,8 @@
 | `send_group_msg_raw` | send_group_msg_raw.go | 发送原始群消息（不做预处理） |
 | `send_private_msg` | send_private_msg.go | 发送私聊消息 |
 | `send_private_msg_async` | send_private_msg_async.go | 异步发私聊消息 |
-| `delete_msg` | delete_msg.go | 撤回消息（见下方说明） |
+| `delete_msg` | delete_msg.go | 撤回消息 |
 | `get_login_info` | get_login_info.go | 获取登录号信息 |
-
-> **delete_msg 差异说明：**
-> QQ 官方 API 的撤回需要 `message_id` 及对应的 `user_id`/`group_id`/`channel_id`/`guild_id` 来定位消息所属场景。
->
-> | 参数 | 类型 | 说明 |
-> |------|------|------|
-> | `message_id` | int32 | 消息 ID |
-> | `user_id` | int64 | 私聊时需要 |
-> | `group_id` | int64 | 群聊时需要 |
-> | `channel_id` | int64 | 频道消息时需要 |
-> | `guild_id` | int64 | 频道私信时需要 |
 | `get_friend_list` | get_friend_list.go | 获取好友列表 |
 | `get_group_list` | get_group_list.go | 获取群列表 |
 | `get_group_info` | get_group_info.go | 获取群信息 |
@@ -40,6 +29,17 @@
 | `.handle_quick_operation` | handle_quick_operation.go | 快速操作 |
 | `.handle_quick_operation_async` | handle_quick_operation_async.go | 异步快速操作 |
 | `mark_msg_as_read` | mark_msg_as_read.go | 标记消息已读 |
+
+> **delete_msg 差异说明：**
+> QQ 官方 API 的撤回需要 `message_id` 及对应的 `user_id`/`group_id`/`channel_id`/`guild_id` 来定位消息所属场景。
+>
+> | 参数 | 类型 | 说明 |
+> |------|------|------|
+> | `message_id` | int32 | 消息 ID |
+> | `user_id` | int64 | 私聊时需要 |
+> | `group_id` | int64 | 群聊时需要 |
+> | `channel_id` | int64 | 频道消息时需要 |
+> | `guild_id` | int64 | 频道私信时需要 |
 
 ## 频道/ guild 扩展 API
 
