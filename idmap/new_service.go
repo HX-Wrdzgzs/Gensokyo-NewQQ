@@ -262,6 +262,12 @@ func backgroundMigration() {
 	migrationStarted = true
 
 	go func() {
+		// 检查是否已全部迁移完成
+		if isMigrationComplete() {
+			mylog.Printf("[idmap] 数据库迁移已完成，跳过")
+			return
+		}
+
 		// 先迁移 identity（ids 桶）
 		migrateBucket(BucketName, IdentityBucketName, identityDB, "identity")
 		// 再迁移消息缓存（cache 桶）
@@ -270,6 +276,7 @@ func backgroundMigration() {
 		// 校验
 		if verifyMigration() {
 			mylog.Printf("[idmap] 数据校验通过，旧 idmap.db 数据已全部安全迁移")
+			markMigrationComplete()
 			finalizeOldDB()
 		} else {
 			mylog.Printf("[idmap] 数据校验失败，保留旧 idmap.db，请手动检查")
@@ -392,6 +399,29 @@ func ResetMigrationCursor() {
 // ---------------------------------------------------------------------------
 // 数据校验与收尾
 // ---------------------------------------------------------------------------
+
+const migrationMarkerKey = "_migration_complete_v1"
+
+// isMigrationComplete 检查是否已全部迁移完成
+func isMigrationComplete() bool {
+	initNewDBs()
+	var done bool
+	_ = identityDB.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(IdentityBucketName))
+		done = b.Get([]byte(migrationMarkerKey)) != nil
+		return nil
+	})
+	return done
+}
+
+// markMigrationComplete 标记迁移完成
+func markMigrationComplete() {
+	initNewDBs()
+	_ = identityDB.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(IdentityBucketName))
+		return b.Put([]byte(migrationMarkerKey), []byte("1"))
+	})
+}
 
 // verifyMigration 校验旧库数据是否全部正确迁移到新库
 func verifyMigration() bool {
