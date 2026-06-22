@@ -631,7 +631,11 @@ func StoreIDv2(id string) (int64, error) {
 	}
 
 	// 如果lotus为假,就保持原来的store的方法
-	return StoreID(id)
+	result, err := StoreID(id)
+	if err == nil && len(id) == 32 {
+		newDBStore(id, result)
+	}
+	return result, err
 }
 
 // StoreCachev2 根据a储存b
@@ -922,6 +926,10 @@ func RetrieveRowByIDv2(rowid string) (string, error) {
 	}
 
 	// 如果lotus为假,就保持原来的RetrieveRowByIDv2的方法
+	// 惰性迁移：优先查新 identity DB
+	if id, ok := newDBLookup(rowid); ok {
+		return id, nil
+	}
 	return RetrieveRowByID(rowid)
 }
 
