@@ -267,7 +267,13 @@ func backgroundMigration() {
 		// 再迁移消息缓存（cache 桶）
 		migrateBucket(CacheBucketName, MsgBucketName, msgDB, "msg")
 
-		mylog.Printf("[idmap] 后台迁移完成，旧 idmap.db 可安全删除")
+		// 校验
+		if verifyMigration() {
+			mylog.Printf("[idmap] 数据校验通过，旧 idmap.db 数据已全部安全迁移")
+			finalizeOldDB()
+		} else {
+			mylog.Printf("[idmap] 数据校验失败，保留旧 idmap.db，请手动检查")
+		}
 	}()
 }
 
@@ -381,6 +387,104 @@ func writeBatchToNewDB(newDB *bbolt.DB, bucketName string, entries []entry) int 
 func ResetMigrationCursor() {
 	oldCursorKey = nil
 	migrationStarted = false
+}
+
+// ---------------------------------------------------------------------------
+// 数据校验与收尾
+// ---------------------------------------------------------------------------
+
+// verifyMigration 校验旧库数据是否全部正确迁移到新库
+func verifyMigration() bool {
+	if !hasOldDB() {
+		return true
+	}
+
+	ok := true
+
+	// 校验 identity 桶
+	ok = verifyBucket(BucketName, IdentityBucketName, identityDB, "identity") && ok
+	// 校验 msg 桶
+	ok = verifyBucket(CacheBucketName, MsgBucketName, msgDB, "msg") && ok
+
+	return ok
+}
+
+// verifyBucket 校验单个桶的迁移完整性（对比条数 + 抽查）
+func verifyBucket(oldBucket, newBucket string, newDB *bbolt.DB, label string) bool {
+	var oldCount, newCount int
+	var mismatch int
+
+	// 读旧库全部 key
+	oldKeys := make(map[string]string)
+	_ = db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(oldBucket))
+		if b == nil {
+			return nil
+		}
+		return b.ForEach(func(k, v []byte) error {
+			key := string(k)
+			if key == IdentityCounterKey || key == MsgCounterKey {
+				return nil
+			}
+			oldKeys[key] = string(v)
+			oldCount++
+			return nil
+		})
+	})
+
+	// 读新库全部 key
+	newKeys := make(map[string]string)
+	_ = newDB.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(newBucket))
+		if b == nil {
+			return nil
+		}
+		return b.ForEach(func(k, v []byte) error {
+			key := string(k)
+			if key == IdentityCounterKey || key == MsgCounterKey {
+				return nil
+			}
+			newKeys[key] = string(v)
+			newCount++
+			return nil
+		})
+	})
+
+	// 对比
+	for k, v := range oldKeys {
+		if nv, exists := newKeys[k]; !exists {
+			mismatch++
+			if mismatch <= 3 {
+				mylog.Printf("[idmap] 校验 %s: 丢失 key=%s", label, k)
+			}
+		} else if nv != v {
+			mismatch++
+			if mismatch <= 3 {
+				mylog.Printf("[idmap] 校验 %s: 值不匹配 key=%s (old=%s new=%s)", label, k, v, nv)
+			}
+		}
+	}
+
+	if mismatch > 0 {
+		mylog.Printf("[idmap] 校验 %s: %d 条丢失/不匹配 (共 %d 条)", label, mismatch, oldCount)
+		return false
+	}
+
+	mylog.Printf("[idmap] 校验 %s: %d 条全部一致", label, oldCount)
+	return true
+}
+
+// ---------------------------------------------------------------------------
+// 数据校验与收尾
+// ---------------------------------------------------------------------------
+func finalizeOldDB() {
+	if !hasOldDB() {
+		return
+	}
+
+	// 运行时只打日志标记，不关闭旧库（避免影响运行中的热路径回退读）
+	mylog.Printf("[idmap] 旧 idmap.db 数据已全部迁移完毕，下次重启前可安全删除")
+	mylog.Printf("[idmap] 安全删除方法: 停止 Gensokyo → 删除 idmap.db → 重启")
 }
 
 // StoreGroupID 存储群 OpenID → 虚拟群 ID
