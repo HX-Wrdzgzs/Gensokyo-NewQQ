@@ -7,6 +7,7 @@ type EventType string
 type WSPayload struct {
 	WSPayloadBase
 	Data       interface{} `json:"d,omitempty"`
+	ID         string      `json:"id,omitempty"`
 	S          int64       `json:"s,omitempty"`
 	RawMessage []byte      `json:"-"` // 原始的 message 数据
 }
@@ -113,6 +114,9 @@ type WSInteractionData Interaction
 
 // WSGroupATMessageData 群@机器人的事件
 type WSGroupATMessageData Message
+
+// WSGroupMessageData 普通群消息事件（无需@机器人）
+type WSGroupMessageData Message
 
 // WSC2CMessageData  c2c消息事件
 type WSC2CMessageData Message

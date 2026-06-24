@@ -14,8 +14,10 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/go-multierror"
@@ -92,6 +94,7 @@ type OnebotGroupMessage struct {
 	MessageSeq      int         `json:"message_seq"`
 	Font            int         `json:"font"`
 	UserID          int64       `json:"user_id"`
+	ToMe            bool        `json:"to_me,omitempty"`              //消息是否@了机器人
 	RealMessageType string      `json:"real_message_type,omitempty"`  //当前信息的真实类型 group group_private guild guild_private
 	RealUserID      string      `json:"real_user_id,omitempty"`       //当前真实uid
 	RealGroupID     string      `json:"real_group_id,omitempty"`      //当前真实gid
@@ -115,6 +118,7 @@ type OnebotGroupMessageS struct {
 	MessageSeq      int         `json:"message_seq"`
 	Font            int         `json:"font"`
 	UserID          string      `json:"user_id"`
+	ToMe            bool        `json:"to_me,omitempty"`              //消息是否@了机器人
 	RealMessageType string      `json:"real_message_type,omitempty"`  //当前信息的真实类型 group group_private guild guild_private
 	RealUserID      string      `json:"real_user_id,omitempty"`       //当前真实uid
 	RealGroupID     string      `json:"real_group_id,omitempty"`      //当前真实gid
@@ -624,6 +628,86 @@ func (p *Processors) HandleFrameworkCommand(messageText string, data interface{}
 		SendMessage("您没有权限,请配置config.yml或查看日志,使用临时指令", data, Type, p.Api, p.Apiv2)
 	}
 
+	// -status 指令
+	if (realValueIncluded || virtualValueIncluded) && strings.HasPrefix(cleanedMessage, "-status") {
+		msgRecv := atomic.LoadUint64(&mylog.MetricMsgReceived)
+		msgSent := atomic.LoadUint64(&mylog.MetricMsgSent)
+		errCount := atomic.LoadUint64(&mylog.MetricErrorCount)
+		slowEvents := atomic.LoadUint64(&mylog.MetricSlowEvents)
+		uptimeSec := time.Since(mylog.StartTime).Seconds()
+
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		memAlloc := float64(m.Alloc) / 1024 / 1024
+		goroutines := runtime.NumGoroutine()
+
+		statusText := fmt.Sprintf(
+			"Gensokyo Bot Status:\n"+
+				"- 运行时间 (Uptime): %.2f 秒\n"+
+				"- 内存分配 (Alloc Memory): %.2f MB\n"+
+				"- 协程数量 (Goroutines): %d\n"+
+				"- 接收消息数 (Msg Received): %d\n"+
+				"- 发送消息数 (Msg Sent): %d\n"+
+				"- 错误发生数 (Errors): %d\n"+
+				"- 慢事件发生数 (Slow Events): %d",
+			uptimeSec, memAlloc, goroutines, msgRecv, msgSent, errCount, slowEvents,
+		)
+		SendMessage(statusText, data, Type, p.Api, p.Apiv2)
+		return nil
+	}
+
+	// -broadcast 指令
+	if (realValueIncluded || virtualValueIncluded) && strings.HasPrefix(cleanedMessage, "-broadcast") {
+		broadcastMsg := strings.TrimSpace(strings.TrimPrefix(cleanedMessage, "-broadcast"))
+		if broadcastMsg == "" {
+			SendMessage("广播内容不能为空。用法: -broadcast <内容>", data, Type, p.Api, p.Apiv2)
+			return nil
+		}
+
+		// 获取虚拟群组 (channel)
+		var channelIDs []string
+		guilds, err := p.Api.MeGuilds(context.TODO(), &dto.GuildPager{Limit: "100"})
+		if err == nil {
+			for _, guild := range guilds {
+				channels, err := p.Api.Channels(context.TODO(), guild.ID)
+				if err == nil {
+					for _, ch := range channels {
+						if ch.Type == dto.ChannelTypeText {
+							channelIDs = append(channelIDs, ch.ID)
+						}
+					}
+				}
+			}
+		}
+
+		// 获取常规群组 ID
+		groupIDs, err := idmap.FindKeysBySubAndType("group", "type")
+		if err != nil {
+			mylog.Printf("Broadcast: find keys in idmap failed: %v", err)
+		}
+
+		// 异步并发广播到频道和群聊
+		for _, chID := range channelIDs {
+			go func(cID string) {
+				_, _ = p.Api.PostMessage(context.TODO(), cID, &dto.MessageToCreate{
+					Content: broadcastMsg,
+					MsgType: 0,
+				})
+			}(chID)
+		}
+		for _, grpID := range groupIDs {
+			go func(gID string) {
+				_, _ = p.Apiv2.PostGroupMessage(context.TODO(), gID, &dto.MessageToCreate{
+					Content: broadcastMsg,
+					MsgType: 0,
+				})
+			}(grpID)
+		}
+
+		SendMessage(fmt.Sprintf("已向 %d 个频道和 %d 个群聊提交广播请求。", len(channelIDs), len(groupIDs)), data, Type, p.Api, p.Apiv2)
+		return nil
+	}
+
 	//link指令
 	if strings.HasPrefix(cleanedMessage, config.GetLinkPrefix()) {
 		md, kb := generateMdByConfig()
@@ -815,7 +899,7 @@ func SendMessage(messageText string, data interface{}, messageType string, api o
 		// 处理公会消息
 		msgseq := echo.GetMappingSeq(msg.ID)
 		echo.AddMappingSeq(msg.ID, msgseq+1)
-		textMsg, _ := handlers.GenerateReplyMessage(msg.ID, nil, messageText, msgseq+1)
+		textMsg, _ := handlers.GenerateReplyMessage(msg.ID, nil, messageText, msgseq+1, nil)
 		if _, err := api.PostMessage(context.TODO(), msg.ChannelID, textMsg); err != nil {
 			mylog.Printf("发送文本信息失败: %v", err)
 			return err
@@ -825,7 +909,7 @@ func SendMessage(messageText string, data interface{}, messageType string, api o
 		// 处理群组消息
 		msgseq := echo.GetMappingSeq(msg.ID)
 		echo.AddMappingSeq(msg.ID, msgseq+1)
-		textMsg, _ := handlers.GenerateReplyMessage(msg.ID, nil, messageText, msgseq+1)
+		textMsg, _ := handlers.GenerateReplyMessage(msg.ID, nil, messageText, msgseq+1, nil)
 		_, err := apiv2.PostGroupMessage(context.TODO(), msg.GroupID, textMsg)
 		if err != nil {
 			mylog.Printf("发送文本群组信息失败: %v", err)
@@ -843,7 +927,7 @@ func SendMessage(messageText string, data interface{}, messageType string, api o
 		}
 		msgseq := echo.GetMappingSeq(msg.ID)
 		echo.AddMappingSeq(msg.ID, msgseq+1)
-		textMsg, _ := handlers.GenerateReplyMessage(msg.ID, nil, messageText, msgseq+1)
+		textMsg, _ := handlers.GenerateReplyMessage(msg.ID, nil, messageText, msgseq+1, nil)
 		if _, err := apiv2.PostDirectMessage(context.TODO(), dm, textMsg); err != nil {
 			mylog.Printf("发送文本信息失败: %v", err)
 			return err
@@ -853,7 +937,7 @@ func SendMessage(messageText string, data interface{}, messageType string, api o
 		// 处理群组私聊消息
 		msgseq := echo.GetMappingSeq(msg.ID)
 		echo.AddMappingSeq(msg.ID, msgseq+1)
-		textMsg, _ := handlers.GenerateReplyMessage(msg.ID, nil, messageText, msgseq+1)
+		textMsg, _ := handlers.GenerateReplyMessage(msg.ID, nil, messageText, msgseq+1, nil)
 		_, err := apiv2.PostC2CMessage(context.TODO(), msg.Author.ID, textMsg)
 		if err != nil {
 			mylog.Printf("发送文本私聊信息失败: %v", err)

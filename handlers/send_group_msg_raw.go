@@ -260,7 +260,7 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 				echo.AddMappingSeq(messageID, msgseq+1)
 				groupMessage = &dto.MessageToCreate{
 					Content: messageText, // 添加文本内容
-					Media: dto.Media{
+					Media: &dto.Media{
 						FileInfo: fileInfo, // 添加图像信息
 					},
 					MsgID:   messageID,
@@ -311,7 +311,9 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 			messageText = ""
 		}
 
-		// 优先发送文本信息
+		// 优先发送文本信息（跳过纯 markdown 消息，由下方 foundItems 循环处理）
+		mdRe := regexp.MustCompile(`\[CQ:markdown,[^\]]*\]`)
+		messageText = mdRe.ReplaceAllString(messageText, "")
 		if messageText != "" {
 			msgseq := echo.GetMappingSeq(messageID)
 			echo.AddMappingSeq(messageID, msgseq+1)
@@ -420,7 +422,7 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 						MsgID:   messageID,
 						MsgSeq:  msgseq,
 						MsgType: 7, // 默认文本类型
-						Media:   media,
+						Media:   &media,
 					}
 					groupMessage.Timestamp = time.Now().Unix() // 设置时间戳
 					//重新为err赋值

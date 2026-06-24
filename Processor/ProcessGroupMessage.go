@@ -36,6 +36,8 @@ func (p *Processors) ProcessGroupMessage(data *dto.WSGroupATMessageData) error {
 	var userid64 int64
 	var GroupID64 int64
 	var err error
+	// GROUP_AT_MESSAGE_CREATE 必然是 @ 机器人的消息
+	toMe := true
 
 	if data.Author.ID == "" {
 		mylog.Printf("出现ID为空未知错误.%v\n", data)
@@ -205,6 +207,7 @@ func (p *Processors) ProcessGroupMessage(data *dto.WSGroupATMessageData) error {
 			},
 			SubType: "normal",
 			Time:    time.Now().Unix(),
+			ToMe:    toMe,
 		}
 		//增强配置
 		if !config.GetNativeOb11() {
@@ -220,6 +223,8 @@ func (p *Processors) ProcessGroupMessage(data *dto.WSGroupATMessageData) error {
 		if CaN != "" {
 			groupMsg.Sender.Nickname = CaN
 			groupMsg.Sender.Card = CaN
+		} else if data.Author.Username != "" {
+			groupMsg.Sender.Nickname = data.Author.Username
 		}
 		// 根据条件判断是否添加Echo字段
 		if config.GetTwoWayEcho() {
@@ -239,8 +244,10 @@ func (p *Processors) ProcessGroupMessage(data *dto.WSGroupATMessageData) error {
 			}
 		}
 
-		// 根据isMaster的值为groupMsg的Sender赋值role字段
-		if isMaster {
+		// 优先使用 QQ API 返回的 member_role，兼容 OneBot V11
+		if data.Author != nil && data.Author.MemberRole != "" {
+			groupMsg.Sender.Role = data.Author.MemberRole
+		} else if isMaster {
 			groupMsg.Sender.Role = "owner"
 		} else {
 			groupMsg.Sender.Role = "member"
@@ -296,6 +303,7 @@ func (p *Processors) ProcessGroupMessage(data *dto.WSGroupATMessageData) error {
 			},
 			SubType:  "normal",
 			Time:     time.Now().Unix(),
+			ToMe:     toMe,
 			Platform: platform,
 		}
 		// 增强配置
@@ -310,6 +318,8 @@ func (p *Processors) ProcessGroupMessage(data *dto.WSGroupATMessageData) error {
 		if CaN != "" {
 			groupMsgS.Sender.Nickname = CaN
 			groupMsgS.Sender.Card = CaN
+		} else if data.Author.Username != "" {
+			groupMsgS.Sender.Nickname = data.Author.Username
 		}
 		// 根据条件判断是否添加Echo字段
 		if config.GetTwoWayEcho() {
@@ -328,8 +338,10 @@ func (p *Processors) ProcessGroupMessage(data *dto.WSGroupATMessageData) error {
 				break
 			}
 		}
-		// 根据isMaster的值为groupMsg的Sender赋值role字段
-		if isMaster {
+		// 优先使用 QQ API 返回的 member_role，兼容 OneBot V11
+		if data.Author != nil && data.Author.MemberRole != "" {
+			groupMsgS.Sender.Role = data.Author.MemberRole
+		} else if isMaster {
 			groupMsgS.Sender.Role = "owner"
 		} else {
 			groupMsgS.Sender.Role = "member"

@@ -14,6 +14,8 @@ settings:
   app_id: 12345                                      # 你的应用ID
   uin : 0                                            # 你的机器人QQ号,点击机器人资料卡查看  
   use_uin : false                                    # false=使用appid作为机器人id,true=使用机器人QQ号,需设置正确的uin
+  idmap_isolation : false                            # 数据库key加UIN前缀隔离多个Bot（多个Bot连同一数据库时开启）
+  idmap_legacy_compat : false                        # 同时写入旧格式key兼容官方Gensokyo（开启idmap_isolation时有效）
   token: "<YOUR_APP_TOKEN>"                          # 你的应用令牌
   client_secret: "<YOUR_CLIENT_SECRET>"              # 你的客户端密钥
   shard_count: 1                    #分片数量 默认1
@@ -32,21 +34,23 @@ settings:
     # - "CreateMessageHandler"                       # 频道不at信息 私域机器人需要开启 公域机器人开启会连接失败
     # - "InteractionHandler"                         # 添加频道互动回应 卡片按钮data回调事件
     # - "GroupATMessageEventHandler"                 # 群at信息 仅频道机器人时候需要注释
+    # - "GroupMessageEventHandler"                   # 普通群消息（无需@机器人）
     # - "C2CMessageEventHandler"                     # 群私聊 仅频道机器人时候需要注释
     # - "ThreadEventHandler"                         # 频道发帖事件 仅频道私域机器人可用
     # - "FriendAddEventHandler"                      # 用户添加机器人(成为好友)
     # - "FriendDelEventHandler"                      # 用户删除机器人(解除好友)
     # - "C2CMsgRejectHandler"                        # 用户拒绝(关闭)C2C消息推送
     # - "C2CMsgReceiveHandler"                       # 用户开启(接收)C2C消息推送
-
+    # - "GroupMemberAddEventHandler"                 # 群成员新增（非文档化事件）
+    # - "GroupMemberRemoveEventHandler"              # 群成员移除（非文档化事件）
   #转换类
   global_channel_to_group: true                      # 是否将频道转换成群 默认true
   global_private_to_channel: false                   # 是否将私聊转换成频道 如果是群场景 会将私聊转为群(方便提审\测试)
   global_forum_to_channel: false                     # 是否将频道帖子信息转化为频道 子频道信息 如果开启global_channel_to_group会进一步转换为群信息
   global_interaction_to_message : false              # 是否将按钮和表态回调转化为消息 仅在设置了按钮回调中的message时有效
   global_group_msg_rre_to_message : false            # 是否将用户开关机器人资料页的机器人推送开关 产生的事件转换为文本信息并发送给应用端.false将使用onebotv11的notice类型上报.
-  global_group_msg_reject_message : "机器人主动消息被关闭"  # 当开启 global_group_msg_rre_to_message 时,机器人主动信息被关闭将上报的信息. 自行添加intent - GroupMsgRejectHandler
-  global_group_msg_receive_message : "机器人主动消息被开启" # 建议设置为无规则复杂随机内容,避免用户指令内容碰撞. 自行添加 intent - GroupMsgReceiveHandler
+  global_group_msg_reject_message : "机器人主动消息被关闭"  # 开启 global_group_msg_rre_to_message 时自动订阅，无需手动添加 intent
+  global_group_msg_receive_message : "机器人主动消息被开启" # 同上，开启后自动订阅
 
   global_c2c_msg_switch_to_message: false          # 是否将用户(C2C)开关机器人资料页的机器人推送开关 产生的事件转换为文本信息. false将使用自定义notice类型上报.
   global_c2c_msg_reject_message: "机器人C2C推送被关闭" # 当开启 global_c2c_msg_switch_to_message 时, C2C主动信息被关闭将上报的信息.
@@ -69,6 +73,7 @@ settings:
   #增强配置项                                           
   master_id : ["1","2"]             #群场景尚未开放获取管理员和列表能力,手动从日志中获取需要设置为管理,的user_id并填入(适用插件有权限判断场景)
   record_sampleRate : 24000         #语音文件的采样率 最高48000 默认24000 单位Khz
+  discover_unknown_events: false    #订阅所有未使用的intent位,用于探测QQ API未文档化的事件（如GROUP_MEMBER_ADD）。日志将输出未知事件类型
   record_bitRate : 24000            #语音文件的比特率 默认25000 代表 25 kbps 最高无限 请根据带宽 您发送的实际码率调整
   card_nick : ""                    #默认为空,连接mirai-overflow时,请设置为非空,这里是机器人对用户称谓,为空为插件获取,mirai不支持
   auto_bind : true                  #测试功能,后期会移除
@@ -103,6 +108,11 @@ settings:
   log_level : 1                     # 0=debug 1=info 2=warning 3=error 默认1
   save_logs : false                 #自动储存日志
   log_suffix_per_mins : 0           #默认0,代表不切分日志文件,设置60代表每60分钟储存一个日志文件,如果你的日志文件太大打不开,可以设置这个到合适的时间范围.
+  log_color_enabled : true          #控制台日志彩色高亮显示 默认true
+  log_json_output : false           #文件日志是否以结构化 JSON 格式输出 默认false
+  log_max_age_days : 30             #文件日志最大保留天数 默认30
+  log_max_size_mb : 100             #单个日志文件大小上限(MB) 默认100
+  log_slow_event_threshold_ms : 500  #慢事件判定耗时阈值(毫秒) 默认500
 
   #webui设置
   disable_webui: false              #禁用webui

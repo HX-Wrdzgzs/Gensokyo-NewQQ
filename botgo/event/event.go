@@ -2,6 +2,7 @@ package event
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -75,6 +76,7 @@ var eventParseFuncMap = map[dto.OPCode]map[dto.EventType]eventParseFunc{
 
 		dto.EventInteractionCreate:    interactionHandler,
 		dto.EventGroupAtMessageCreate: groupAtMessageHandler,
+		dto.EventGroupMessageCreate:  groupMessageHandler, // [新增] 映射到新建的groupMessageHandler
 		dto.EventC2CMessageCreate:     c2cMessageHandler,
 		dto.EventGroupAddRobot:        groupaddbothandler,
 		dto.EventGroupDelRobot:        groupdelbothandler,
@@ -86,6 +88,10 @@ var eventParseFuncMap = map[dto.OPCode]map[dto.EventType]eventParseFunc{
 		dto.EventFriendDel:     friendDelHandler,
 		dto.EventC2CMsgReject:  c2cMsgRejectHandler,
 		dto.EventC2CMsgReceive: c2cMsgReceiveHandler,
+
+		// [新增] 群成员变动事件
+		dto.EventGroupMemberAdd:    groupMemberAddHandler,
+		dto.EventGroupMemberRemove: groupMemberRemoveHandler,
 	},
 }
 
@@ -101,6 +107,8 @@ func ParseAndHandle(payload *dto.WSPayload) error {
 	if DefaultHandlers.Plain != nil {
 		return DefaultHandlers.Plain(payload, payload.RawMessage)
 	}
+	// 未知事件类型：打印日志方便排查
+	fmt.Printf("[botgo] 未处理的事件类型: OP=%d, Type=%s, Raw=%s\n", payload.OPCode, payload.Type, string(payload.RawMessage))
 	return nil
 }
 
@@ -317,6 +325,28 @@ func groupdelbothandler(payload *dto.WSPayload, message []byte) error {
 	return nil
 }
 
+func groupMemberAddHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.GroupMemberEvent{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.GroupMemberAdd != nil {
+		return DefaultHandlers.GroupMemberAdd(payload, data)
+	}
+	return nil
+}
+
+func groupMemberRemoveHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.GroupMemberEvent{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.GroupMemberRemove != nil {
+		return DefaultHandlers.GroupMemberRemove(payload, data)
+	}
+	return nil
+}
+
 func publicMessageDeleteHandler(payload *dto.WSPayload, message []byte) error {
 	data := &dto.WSPublicMessageDeleteData{}
 	if err := ParseData(message, data); err != nil {
@@ -493,6 +523,21 @@ func c2cMsgReceiveHandler(payload *dto.WSPayload, message []byte) error {
 	}
 	if DefaultHandlers.C2CMsgReceive != nil {
 		return DefaultHandlers.C2CMsgReceive(payload, data)
+	}
+	return nil
+}
+
+// [新增] 普通群消息事件处理
+func groupMessageHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSGroupMessageData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if _, loaded := processedIDs.LoadOrStore(data.ID, struct{}{}); loaded {
+		return nil
+	}
+	if DefaultHandlers.GroupMessage != nil {
+		return DefaultHandlers.GroupMessage(payload, data)
 	}
 	return nil
 }

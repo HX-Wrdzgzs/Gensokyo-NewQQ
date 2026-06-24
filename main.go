@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -282,10 +283,33 @@ func main() {
 				intent |= websocket.RegisterHandlers(handler)
 			}
 
+			// 发现未知事件模式：订阅所有未使用的 intent 位
+			if config.GetDiscoverUnknownEvents() {
+				unknownBits := []int{6, 7, 8, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 31}
+				for _, bit := range unknownBits {
+					intent |= dto.Intent(1 << bit)
+				}
+				log.Printf("发现未知事件模式已启用，额外订阅的 intent 位: %v", unknownBits)
+			}
+
 			log.Printf("注册 intents: %v\n", intent)
+
+			// 自动订阅：开启 global_group_msg_rre_to_message 时自动注册两个群推送开关事件
+			if config.GetGlobalGroupMsgRejectReciveEventToMessage() {
+				for _, name := range []string{"GroupMsgRejectHandler", "GroupMsgReceiveHandler"} {
+					if handler, ok := getHandlerByName(name); ok {
+						intent |= websocket.RegisterHandlers(handler)
+						log.Printf("自动订阅 intent: %s（global_group_msg_rre_to_message 开启）", name)
+					}
+				}
+			}
 
 			// 确保p包含conf
 			p = Processor.NewProcessorV2(api, apiV2, &conf.Settings)
+
+			// 同步旧库计数器到新库（阻塞），保证后续 storeIdentity 不会分配冲突的虚拟 ID
+			// 计数器就绪后才连接 QQ 后端
+			idmap.StartMigration()
 
 			// 启动session manager以管理websocket连接
 			// 指定需要启动的分片数为 2 的话可以手动修改 wsInfo
@@ -316,7 +340,7 @@ func main() {
 				log.Printf("使用%d个分片,当前是第%d个分片,比如：[0,4]，代表分为四个片，当前链接是第 0 个片,业务稍后应该继续多开gensokyo,可在不同的服务器和ip地址 shard 为[1,4],[2,4],[3,4]的链接，才能完整接收和处理事件。\n", conf.Settings.ShardCount, conf.Settings.ShardID)
 			}
 
-			// 启动多个WebSocket客户端的逻辑
+			// 启动多个WebSocket客户端的逻辑（OnebotV11 反向 WS 适配器）
 			if !allEmpty(conf.Settings.WsAddress) {
 				wsClientChan := make(chan *wsclient.WebSocketClient, len(conf.Settings.WsAddress))
 				errorChan := make(chan error, len(conf.Settings.WsAddress))
@@ -456,6 +480,7 @@ func main() {
 
 	r.GET("/updateport", server.HandleIpupdate)
 	r.POST("/delpic", server.DeleteImageHandler(rateLimiter))
+	r.GET("/metrics", MetricsHandler)
 	r.POST("/uploadpic", server.UploadBase64ImageHandler(rateLimiter))
 	r.POST("/uploadpicv2", server.UploadBase64ImageHandlerV2(rateLimiter, apiV2))
 	r.POST("/uploadpicv3", server.UploadBase64ImageHandlerV3(rateLimiter, api))
@@ -486,6 +511,7 @@ func main() {
 		mylog.Println("正向http api启动成功,监听" + http_api_address + "若有需要,请对外放通端口...")
 		HttpApiGroup := hr.Group("/")
 		{
+			HttpApiGroup.GET("/metrics", MetricsHandler)
 			HttpApiGroup.GET("/*filepath", httpapi.CombinedMiddleware(api, apiV2))
 			HttpApiGroup.POST("/*filepath", httpapi.CombinedMiddleware(api, apiV2))
 			HttpApiGroup.PUT("/*filepath", httpapi.CombinedMiddleware(api, apiV2))
@@ -657,6 +683,19 @@ func main() {
 	}
 }
 
+func runWithTimer(eventName string, fn func()) {
+	go func() {
+		start := time.Now()
+		fn()
+		elapsed := time.Since(start)
+		threshold := time.Duration(config.GetLogSlowEventThresholdMS()) * time.Millisecond
+		if elapsed > threshold {
+			mylog.IncrementSlowEvents()
+			mylog.Warnf("[SLOW] Event %s took %v (threshold: %v)", eventName, elapsed, threshold)
+		}
+	}()
+}
+
 // ReadyHandler 自定义 ReadyHandler 感知连接成功事件
 func ReadyHandler() event.ReadyHandler {
 	return func(event *dto.WSPayload, data *dto.WSReadyData) {
@@ -682,7 +721,9 @@ func ATMessageEventHandler() event.ATMessageEventHandler {
 			}
 		}
 
-		go p.ProcessGuildATMessage(data)
+		runWithTimer("ATMessage", func() {
+			p.ProcessGuildATMessage(data)
+		})
 		return nil
 	}
 }
@@ -706,7 +747,7 @@ func ChannelEventHandler() event.ChannelEventHandler {
 // MemberEventHandler 处理成员变更事件
 func MemberEventHandler() event.GuildMemberEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSGuildMemberData) error {
-		log.Println(data)
+		go p.ProcessGuildMember(data, string(event.Type))
 		return nil
 	}
 }
@@ -721,7 +762,9 @@ func DirectMessageHandler() event.DirectMessageEventHandler {
 				data.Author.Username = acnode.CheckWordIN(data.Author.Username)
 			}
 		}
-		go p.ProcessChannelDirectMessage(data)
+		runWithTimer("DirectMessage", func() {
+			p.ProcessChannelDirectMessage(data)
+		})
 		return nil
 	}
 }
@@ -736,7 +779,9 @@ func CreateMessageHandler() event.MessageEventHandler {
 				data.Author.Username = acnode.CheckWordIN(data.Author.Username)
 			}
 		}
-		go p.ProcessGuildNormalMessage(data)
+		runWithTimer("CreateMessage", func() {
+			p.ProcessGuildNormalMessage(data)
+		})
 		return nil
 	}
 }
@@ -762,7 +807,9 @@ func ThreadEventHandler() event.ThreadEventHandler {
 // GroupATMessageEventHandler 实现处理 群at 消息的回调
 func GroupATMessageEventHandler() event.GroupATMessageEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSGroupATMessageData) error {
-		go p.ProcessGroupMessage(data)
+		runWithTimer("GroupATMessage", func() {
+			p.ProcessGroupMessage(data)
+		})
 
 		if !config.GetDisableErrorChan() {
 			botstats.RecordMessageReceived()
@@ -782,7 +829,9 @@ func GroupATMessageEventHandler() event.GroupATMessageEventHandler {
 // C2CMessageEventHandler 实现处理 群私聊 消息的回调
 func C2CMessageEventHandler() event.C2CMessageEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSC2CMessageData) error {
-		go p.ProcessC2CMessage(data)
+		runWithTimer("C2CMessage", func() {
+			p.ProcessC2CMessage(data)
+		})
 
 		if !config.GetDisableErrorChan() {
 			botstats.RecordMessageReceived()
@@ -864,6 +913,23 @@ func C2CMsgReceiveHandler() event.C2CMsgReceiveHandler {
 	}
 }
 
+// GroupMemberAddEventHandler 实现处理 群成员新增 事件的回调
+func GroupMemberAddEventHandler() event.GroupMemberAddEventHandler {
+	return func(event *dto.WSPayload, data *dto.GroupMemberEvent) error {
+		data.EventID = event.ID
+		go p.ProcessGroupMember(data, "GROUP_MEMBER_ADD")
+		return nil
+	}
+}
+
+// GroupMemberRemoveEventHandler 实现处理 群成员移除 事件的回调
+func GroupMemberRemoveEventHandler() event.GroupMemberRemoveEventHandler {
+	return func(event *dto.WSPayload, data *dto.GroupMemberEvent) error {
+		go p.ProcessGroupMember(data, "GROUP_MEMBER_REMOVE")
+		return nil
+	}
+}
+
 func getHandlerByName(handlerName string) (interface{}, bool) {
 	switch handlerName {
 	case "ReadyHandler": //连接成功
@@ -907,6 +973,12 @@ func getHandlerByName(handlerName string) (interface{}, bool) {
 		return C2CMsgRejectHandler(), true
 	case "C2CMsgReceiveHandler": //用户请求开启机器人C2C主动推送
 		return C2CMsgReceiveHandler(), true
+	case "GroupMessageEventHandler": // 普通群消息（无需@）
+		return GroupMessageEventHandler(), true
+	case "GroupMemberAddEventHandler": // 群成员新增
+		return GroupMemberAddEventHandler(), true
+	case "GroupMemberRemoveEventHandler": // 群成员移除
+		return GroupMemberRemoveEventHandler(), true
 	default:
 		log.Printf("Unknown handler: %s\n", handlerName)
 		return nil, false
@@ -1002,4 +1074,62 @@ func UnionFanout(base gin.HandlerFunc) gin.HandlerFunc {
 		// 4) 继续执行原有处理器（本地业务逻辑）
 		base(c)
 	}
+}
+
+// GroupMessageEventHandler 实现处理 普通群消息（无需@） 的回调
+func GroupMessageEventHandler() event.GroupMessageEventHandler {
+	return func(event *dto.WSPayload, data *dto.WSGroupMessageData) error {
+		mylog.Printf("[GroupMessageEventHandler] 收到非@群消息 ID=%v from=%v content=%v", data.ID, data.Author.ID, data.Content)
+		if config.GetEnableChangeWord() {
+			data.Content = acnode.CheckWordIN(data.Content)
+			if data.Author.Username != "" {
+				data.Author.Username = acnode.CheckWordIN(data.Author.Username)
+			}
+		}
+		runWithTimer("GroupMessage", func() {
+			p.ProcessGroupNormalMessage(data)
+		})
+		if !config.GetDisableErrorChan() {
+			botstats.RecordMessageReceived()
+		}
+		return nil
+	}
+}
+
+func MetricsHandler(c *gin.Context) {
+	c.Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+
+	msgRecv := atomic.LoadUint64(&mylog.MetricMsgReceived)
+	msgSent := atomic.LoadUint64(&mylog.MetricMsgSent)
+	errCount := atomic.LoadUint64(&mylog.MetricErrorCount)
+	slowEvents := atomic.LoadUint64(&mylog.MetricSlowEvents)
+
+	uptime := time.Since(mylog.StartTime).Seconds()
+
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	memAlloc := m.Alloc
+
+	output := fmt.Sprintf(
+		"# HELP gensokyo_uptime_seconds Uptime of the bot in seconds.\n"+
+			"# TYPE gensokyo_uptime_seconds gauge\n"+
+			"gensokyo_uptime_seconds %.2f\n"+
+			"# HELP gensokyo_messages_received_total Total number of received messages.\n"+
+			"# TYPE gensokyo_messages_received_total counter\n"+
+			"gensokyo_messages_received_total %d\n"+
+			"# HELP gensokyo_messages_sent_total Total number of sent messages.\n"+
+			"# TYPE gensokyo_messages_sent_total counter\n"+
+			"gensokyo_messages_sent_total %d\n"+
+			"# HELP gensokyo_errors_total Total number of log errors.\n"+
+			"# TYPE gensokyo_errors_total counter\n"+
+			"gensokyo_errors_total %d\n"+
+			"# HELP gensokyo_slow_events_total Total number of slow processing events.\n"+
+			"# TYPE gensokyo_slow_events_total counter\n"+
+			"gensokyo_slow_events_total %d\n"+
+			"# HELP gensokyo_memory_allocated_bytes Memory currently allocated in bytes.\n"+
+			"# TYPE gensokyo_memory_allocated_bytes gauge\n"+
+			"gensokyo_memory_allocated_bytes %d\n",
+		uptime, msgRecv, msgSent, errCount, slowEvents, memAlloc,
+	)
+	c.String(http.StatusOK, output)
 }

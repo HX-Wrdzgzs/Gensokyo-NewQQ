@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -238,6 +239,11 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 			messageID = GetMessageIDByUseridOrGroupid(config.GetAppIDStr(), message.Params.GroupID)
 			mylog.Println("通过GetMessageIDByUseridOrGroupid函数获取的message_id:", message.Params.GroupID, messageID)
 		}
+		// 主动推送：没有用户上下文时，缓存的 msg_id 已过期，清掉
+		if messageID != "" && (message.Params.UserID == nil || message.Params.UserID.(string) == "" || message.Params.UserID.(string) == "0") && eventID == "" {
+			messageID = ""
+			mylog.Println("主动推送模式，清空缓存的 msg_id")
+		}
 		//开发环境用 1000在群里无效
 		// if config.GetDevMsgID() {
 		// 	messageID = "1000"
@@ -318,7 +324,7 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 					echo.AddMappingSeq(messageID, msgseq+1)
 					groupMessage = &dto.MessageToCreate{
 						Content: messageText, // 添加文本内容
-						Media: dto.Media{
+						Media: &dto.Media{
 							FileInfo: fileInfo, // 添加图像信息
 						},
 						MsgID:   messageID,
@@ -410,9 +416,40 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 
 		// 优先发送文本信息
 		if messageText != "" {
+			// 处理出站 [CQ:member] → 自动转换 user_id 并设置 eventID/主动模式
+			// 返回的 realGroupID 是转换后的真实 GroupOpenID，可用作目标群
+			var realGroupID string
+			messageText, realGroupID, _ = ProcessCQMemberOutbound(messageText, &eventID, message.Params.GroupID.(string), apiv2)
+			if realGroupID != "" {
+				mylog.Printf("[CQ:member] CQ 码 group_id 已转为 OpenID=%s", realGroupID)
+			}
+
+			// 如果 CQ 码中携带了 group_id，优先使用它作为目标群（支持跨群路由）
+			targetGroupID := message.Params.GroupID.(string)
+			if realGroupID != "" {
+				targetGroupID = realGroupID
+			}
+			var md *dto.Markdown
+			var kb *keyboard.MessageKeyboard
+			if mdItems, ok := foundItems["markdown"]; ok && len(mdItems) > 0 {
+				md, kb = parseMarkdownFromMessage(mdItems[0])
+				// 提取 messageText 中的 @ 标签（<qqbot-at-user .../>），合并到 markdown 内容
+				atRe := regexp.MustCompile(`<qqbot-at-user\s+[^>]*/>`)
+				atTag := atRe.FindString(messageText)
+				if atTag != "" {
+					md.Content = atTag + "\n" + md.Content
+				}
+				// 从 messageText 中移除 [CQ:markdown,...] 和 <qqbot-at-user> 部分
+				mdRe := regexp.MustCompile(`\[CQ:markdown,[^\]]*\]`)
+				messageText = mdRe.ReplaceAllString(messageText, "")
+				messageText = atRe.ReplaceAllString(messageText, "")
+			}
+
+			// message.Params.GroupID 已在前面转换为真实 OpenID，直接使用
+
 			msgseq := echo.GetMappingSeq(messageID)
 			echo.AddMappingSeq(messageID, msgseq+1)
-			groupReply := generateGroupMessage(messageID, eventID, nil, messageText, msgseq+1, apiv2, message.Params.GroupID.(string))
+			groupReply := generateGroupMessage(messageID, eventID, nil, messageText, msgseq+1, apiv2, targetGroupID)
 
 			// 进行类型断言
 			groupMessage, ok := groupReply.(*dto.MessageToCreate)
@@ -421,10 +458,38 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 				return "", nil // 或其他错误处理
 			}
 
+			// 如果有 markdown，改为 markdown 消息
+			if md != nil {
+				groupMessage.Markdown = md
+				groupMessage.Keyboard = kb // 携带按钮
+				groupMessage.MsgType = 2
+				groupMessage.Content = ""
+				// 从 foundItems 中移除 markdown，避免下方循环重复发送
+				delete(foundItems, "markdown")
+				mylog.Printf("[CQ:markdown] 将消息类型切换为 markdown")
+			}
+
+			// 处理 [CQ:reply,id=数字] → message_reference
+			if replyIDs, ok := foundItems["reply_msg_id"]; ok && len(replyIDs) > 0 {
+				if messageText != "" {
+					// 虚拟 reply ID → 真实 QQ API message_id
+					realReplyID, err := idmap.RetrieveRowByCachev2(replyIDs[0])
+					if err == nil && realReplyID != "" {
+						// echo 缓存中的 ID 格式为 "GroupID MessageID"，取后半段
+						parts := strings.Split(realReplyID, " ")
+						refID := parts[len(parts)-1]
+						groupMessage.MessageReference = &dto.MessageReference{
+							MessageID:             refID,
+							IgnoreGetMessageError: true,
+						}
+					}
+				}
+			}
+
 			var resp *dto.GroupMessageResponse
 			groupMessage.Timestamp = time.Now().Unix() // 设置时间戳
 			//重新为err赋值
-			resp, err = apiv2.PostGroupMessage(context.TODO(), message.Params.GroupID.(string), groupMessage)
+			resp, err = apiv2.PostGroupMessage(context.TODO(), targetGroupID, groupMessage)
 			if err != nil {
 				mylog.Printf("发送文本群组信息失败: %v", err)
 				// 错误保存到本地
@@ -437,12 +502,12 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 			if err != nil && strings.Contains(err.Error(), `"code":22009`) {
 				mylog.Printf("信息发送失败,加入到队列中,下次被动信息进行发送")
 				var pair echo.MessageGroupPair
-				pair.Group = message.Params.GroupID.(string)
+				pair.Group = targetGroupID
 				pair.GroupMessage = groupMessage
 				echo.PushGlobalStack(pair)
 			} else if err != nil && strings.Contains(err.Error(), `"code":40034025`) {
 				groupMessage.EventID = ""
-				resp, err = apiv2.PostGroupMessage(context.TODO(), message.Params.GroupID.(string), groupMessage)
+				resp, err = apiv2.PostGroupMessage(context.TODO(), targetGroupID, groupMessage)
 				if err != nil {
 					mylog.Printf("发送文本群组信息失败: %v", err)
 					// 错误保存到本地
@@ -453,7 +518,7 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 					}
 				}
 			} else if err != nil && strings.Contains(err.Error(), "context deadline exceeded") {
-				postGroupMessageWithRetry(apiv2, message.Params.GroupID.(string), groupMessage)
+				postGroupMessageWithRetry(apiv2, targetGroupID, groupMessage)
 			}
 
 			if !config.GetNoRetMsg() {
@@ -489,10 +554,10 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 				// 进行类型断言
 				richMediaMessage, ok := groupReply.(*dto.RichMediaMessage)
 				if !ok {
-					mylog.Printf("Error: Expected RichMediaMessage type for key %s.", key)
 					// 定义一个map来存储关键字
 					keyMap := map[string]bool{
 						"markdown":      true,
+						"embed":         true,
 						"qqmusic":       true,
 						"local_image":   true,
 						"local_record":  true,
@@ -508,6 +573,15 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 						if !ok {
 							mylog.Println("Error: Expected MessageToCreate type.")
 							return "", nil // 或其他错误处理
+						}
+						// 将 reply 引用合并到 markdown 消息中
+						if replyIDs, ok := foundItems["reply_msg_id"]; ok && len(replyIDs) > 0 && key == "markdown" {
+							if messageID != "" {
+								groupMessage.MessageReference = &dto.MessageReference{
+									MessageID:             messageID,
+									IgnoreGetMessageError: true,
+								}
+							}
 						}
 						//重新为err赋值
 						resp, err = apiv2.PostGroupMessage(context.TODO(), message.Params.GroupID.(string), groupMessage)
@@ -591,7 +665,7 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 						EventID: eventID,
 						MsgSeq:  msgseq,
 						MsgType: 7, // 默认文本类型
-						Media:   media,
+						Media:   &media,
 					}
 					groupMessage.Timestamp = time.Now().Unix() // 设置时间戳
 					//重新为err赋值
@@ -842,10 +916,21 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 			mylog.Printf("音频转码ing")
 		}
 
+		if RecordData == nil || len(RecordData) == 0 {
+			mylog.Errorf("语音转码失败，返回空数据")
+			return &dto.MessageToCreate{
+				Content: "错误: 语音转码失败，请检查 ffmpeg 是否安装",
+				MsgID:   id,
+				EventID: eventid,
+				MsgSeq:  msgseq,
+				MsgType: 0, // 默认文本类型
+			}
+		}
+
 		base64Encoded := base64.StdEncoding.EncodeToString(RecordData)
 		if config.GetUploadPicV2Base64() {
-			// 直接上传图片返回 MessageToCreate type=7
-			messageToCreate, err := images.CreateAndUploadMediaMessage(context.TODO(), base64Encoded, eventid, 1, false, "", groupid, id, msgseq, apiv2)
+			// 直接上传语音返回 MessageToCreate type=7
+			messageToCreate, err := images.CreateAndUploadMediaMessage(context.TODO(), base64Encoded, eventid, 3, false, "", groupid, id, msgseq, apiv2)
 			if err != nil {
 				mylog.Printf("Error messageToCreate: %v", err)
 				return &dto.MessageToCreate{
@@ -1060,10 +1145,20 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 				fileRecordData = silk.EncoderSilk(fileRecordData)
 				mylog.Printf("音频转码ing")
 			}
+			if len(fileRecordData) == 0 {
+				mylog.Errorf("语音转码失败，返回空数据")
+				return &dto.MessageToCreate{
+					Content: "错误: 语音转码失败，请检查 ffmpeg 是否安装",
+					MsgID:   id,
+					EventID: eventid,
+					MsgSeq:  msgseq,
+					MsgType: 0, // 默认文本类型
+				}
+			}
 			base64Encoded := base64.StdEncoding.EncodeToString(fileRecordData)
 			if config.GetUploadPicV2Base64() {
 				// 直接上传语音返回 MessageToCreate type=7
-				messageToCreate, err := images.CreateAndUploadMediaMessage(context.TODO(), base64Encoded, eventid, 1, false, "", groupid, id, msgseq, apiv2)
+				messageToCreate, err := images.CreateAndUploadMediaMessage(context.TODO(), base64Encoded, eventid, 3, false, "", groupid, id, msgseq, apiv2)
 				if err != nil {
 					mylog.Printf("Error messageToCreate: %v", err)
 					return &dto.MessageToCreate{
@@ -1284,6 +1379,12 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 			markdown.Content = mdutil.ReplaceQQBotAtUserIDUnionToRaw(markdown.Content)
 		}
 
+		// 将 markdown 内容中的 CQ at 码转换为 QQ @ 语法
+		if markdown != nil && markdown.Content != "" {
+			markdown.Content = ResolveMarkdownAtMentions(markdown.Content)
+			markdown.Content = ResolveMarkdownImages(markdown.Content, apiv2)
+		}
+
 		return &dto.MessageToCreate{
 			Content:  "markdown",
 			MsgID:    id,
@@ -1451,10 +1552,21 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 			mylog.Printf("音频转码ing")
 		}
 
+		if RecordData == nil || len(RecordData) == 0 {
+			mylog.Errorf("语音转码失败，返回空数据")
+			return &dto.MessageToCreate{
+				Content: "错误: 语音转码失败，请检查 ffmpeg 是否安装",
+				MsgID:   id,
+				EventID: eventid,
+				MsgSeq:  msgseq,
+				MsgType: 0, // 默认文本类型
+			}
+		}
+
 		base64Encoded := base64.StdEncoding.EncodeToString(RecordData)
 		if config.GetUploadPicV2Base64() {
-			// 直接上传图片返回 MessageToCreate type=7
-			messageToCreate, err := images.CreateAndUploadMediaMessagePrivate(context.TODO(), base64Encoded, eventid, 1, false, "", userid, id, msgseq, apiv2)
+			// 直接上传语音返回 MessageToCreate type=7
+			messageToCreate, err := images.CreateAndUploadMediaMessagePrivate(context.TODO(), base64Encoded, eventid, 3, false, "", userid, id, msgseq, apiv2)
 			if err != nil {
 				mylog.Printf("Error messageToCreate: %v", err)
 				return &dto.MessageToCreate{
@@ -1669,10 +1781,20 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 				fileRecordData = silk.EncoderSilk(fileRecordData)
 				mylog.Printf("音频转码ing")
 			}
+			if len(fileRecordData) == 0 {
+				mylog.Errorf("语音转码失败，返回空数据")
+				return &dto.MessageToCreate{
+					Content: "错误: 语音转码失败，请检查 ffmpeg 是否安装",
+					MsgID:   id,
+					EventID: eventid,
+					MsgSeq:  msgseq,
+					MsgType: 0, // 默认文本类型
+				}
+			}
 			base64Encoded := base64.StdEncoding.EncodeToString(fileRecordData)
 			if config.GetUploadPicV2Base64() {
 				// 直接上传语音返回 MessageToCreate type=7
-				messageToCreate, err := images.CreateAndUploadMediaMessagePrivate(context.TODO(), base64Encoded, eventid, 1, false, "", userid, id, msgseq, apiv2)
+				messageToCreate, err := images.CreateAndUploadMediaMessagePrivate(context.TODO(), base64Encoded, eventid, 3, false, "", userid, id, msgseq, apiv2)
 				if err != nil {
 					mylog.Printf("Error messageToCreate: %v", err)
 					return &dto.MessageToCreate{
@@ -1888,6 +2010,19 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 			mylog.Printf("failed to parseMDData: %v", err)
 			return nil
 		}
+
+		// 替换 keyboard 中 __USER_ID__ 占位符为实际用户 OpenID
+		if keyboard != nil {
+			userOpenID := idmap.ResolveOriginalID(userid)
+			ResolvePlaceholderUserIDs(keyboard, userOpenID)
+		}
+
+		// 将 markdown 内容中的 CQ at 码转换为 QQ @ 语法
+		if markdown != nil && markdown.Content != "" {
+			markdown.Content = ResolveMarkdownAtMentions(markdown.Content)
+			markdown.Content = ResolveMarkdownImages(markdown.Content, apiv2)
+		}
+
 		return &dto.MessageToCreate{
 			Content:  "markdown",
 			MsgID:    id,

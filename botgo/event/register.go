@@ -33,6 +33,7 @@ var DefaultHandlers struct {
 	Interaction InteractionEventHandler
 
 	GroupATMessage  GroupATMessageEventHandler
+	GroupMessage    GroupMessageEventHandler // [新增] 字段
 	C2CMessage      C2CMessageEventHandler
 	GroupAddbot     GroupAddRobotEventHandler
 	GroupDelbot     GroupDelRobotEventHandler
@@ -44,6 +45,10 @@ var DefaultHandlers struct {
 	FriendDel     FriendDelEventHandler
 	C2CMsgReject  C2CMsgRejectHandler
 	C2CMsgReceive C2CMsgReceiveHandler
+
+	// [新增] 群成员变动事件
+	GroupMemberAdd    GroupMemberAddEventHandler
+	GroupMemberRemove GroupMemberRemoveEventHandler
 }
 
 // ReadyHandler 可以处理 ws 的 ready 事件
@@ -112,6 +117,9 @@ type InteractionEventHandler func(event *dto.WSPayload, data *dto.WSInteractionD
 // GroupATMessageEventHandler 群中at机器人消息事件 handler
 type GroupATMessageEventHandler func(event *dto.WSPayload, data *dto.WSGroupATMessageData) error
 
+// [新增] 普通群消息事件 handler (无需@机器人)
+type GroupMessageEventHandler func(event *dto.WSPayload, data *dto.WSGroupMessageData) error
+
 // C2CMessageEventHandler 机器人消息事件 handler
 type C2CMessageEventHandler func(event *dto.WSPayload, data *dto.WSC2CMessageData) error
 
@@ -142,6 +150,12 @@ type C2CMsgRejectHandler func(event *dto.WSPayload, data *dto.WSC2CMsgRejectData
 
 // C2CMsgReceiveHandler 用户接受机器人C2C消息事件 handler (C2C_MSG_RECEIVE)
 type C2CMsgReceiveHandler func(event *dto.WSPayload, data *dto.WSC2CMsgReceiveData) error
+
+// GroupMemberAddEventHandler 群成员新增事件 handler (GROUP_MEMBER_ADD)
+type GroupMemberAddEventHandler func(event *dto.WSPayload, data *dto.GroupMemberEvent) error
+
+// GroupMemberRemoveEventHandler 群成员移除事件 handler (GROUP_MEMBER_REMOVE)
+type GroupMemberRemoveEventHandler func(event *dto.WSPayload, data *dto.GroupMemberEvent) error
 
 // *******************************************************************
 
@@ -183,6 +197,12 @@ func RegisterHandlers(handlers ...interface{}) dto.Intent {
 			DefaultHandlers.C2CMsgReject = handle
 		case C2CMsgReceiveHandler:
 			DefaultHandlers.C2CMsgReceive = handle
+		case GroupMemberAddEventHandler:
+			DefaultHandlers.GroupMemberAdd = handle
+			i = i | dto.EventToIntent(dto.EventGroupMemberAdd)
+		case GroupMemberRemoveEventHandler:
+			DefaultHandlers.GroupMemberRemove = handle
+			i = i | dto.EventToIntent(dto.EventGroupMemberRemove)
 		default:
 		}
 	}
@@ -266,6 +286,9 @@ func registerMessageHandlers(i dto.Intent, handlers ...interface{}) dto.Intent {
 		case GroupATMessageEventHandler:
 			DefaultHandlers.GroupATMessage = handle
 			i = i | dto.EventToIntent(dto.EventGroupAtMessageCreate)
+		case GroupMessageEventHandler:  // [新增] case 分支
+			DefaultHandlers.GroupMessage = handle
+			i = i | dto.EventToIntent(dto.EventGroupMessageCreate)
 		case C2CMessageEventHandler:
 			DefaultHandlers.C2CMessage = handle
 			i = i | dto.EventToIntent(dto.EventC2CMessageCreate)

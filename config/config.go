@@ -1519,6 +1519,28 @@ func GetUseUin() bool {
 	return instance.Settings.UseUin
 }
 
+func GetIdmapIsolation() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if instance == nil {
+		fmt.Println("Warning: instance is nil when trying to IdmapIsolation value.")
+		return false
+	}
+	return instance.Settings.IdmapIsolation
+}
+
+func GetIdmapLegacyCompat() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if instance == nil {
+		fmt.Println("Warning: instance is nil when trying to IdmapLegacyCompat value.")
+		return false
+	}
+	return instance.Settings.IdmapLegacyCompat
+}
+
 // 获取GetQrSize的值
 func GetQrSize() int {
 	mu.RLock()
@@ -1798,6 +1820,16 @@ func GetAliyunAudit() bool {
 		return false
 	}
 	return instance.Settings.AliyunAudit
+}
+
+// GetDiscoverUnknownEvents 获取是否订阅所有未知 intent 位
+func GetDiscoverUnknownEvents() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return false
+	}
+	return instance.Settings.DiscoverUnknownEvents
 }
 
 // 获取Alias的值
@@ -2548,4 +2580,63 @@ func GetGlobalC2CMsgReceiveMessage() string {
 		return instance.Settings.GlobalC2CMsgReceiveMessage
 	}
 	return ""
+}
+
+// GetLogColorEnabled 获取是否开启日志彩色
+func GetLogColorEnabled() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return true // 默认开启
+	}
+	return instance.Settings.LogColorEnabled
+}
+
+// GetLogJsonOutput 获取是否开启 JSON 输出
+func GetLogJsonOutput() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return false
+	}
+	return instance.Settings.LogJsonOutput
+}
+
+// GetLogMaxAgeDays 获取日志最大保存天数
+func GetLogMaxAgeDays() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return 30
+	}
+	if instance.Settings.LogMaxAgeDays <= 0 {
+		return 30
+	}
+	return instance.Settings.LogMaxAgeDays
+}
+
+// GetLogMaxSizeMB 获取日志单文件最大大小
+func GetLogMaxSizeMB() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return 100
+	}
+	if instance.Settings.LogMaxSizeMB <= 0 {
+		return 100
+	}
+	return instance.Settings.LogMaxSizeMB
+}
+
+// GetLogSlowEventThresholdMS 获取慢事件阈值
+func GetLogSlowEventThresholdMS() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return 500
+	}
+	if instance.Settings.LogSlowEventThresholdMS <= 0 {
+		return 500
+	}
+	return instance.Settings.LogSlowEventThresholdMS
 }

@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"crypto/md5"
 	"embed"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -16,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hajimehoshi/go-mp3"
 	"github.com/hoshinonyaruko/gensokyo/config"
 	"github.com/hoshinonyaruko/gensokyo/mylog"
 )
@@ -136,6 +139,186 @@ func createDirectoryIfNotExists(directoryPath string) error {
 	return nil
 }
 
+// detectAudioFormat 通过魔数检测音频格式，返回格式名称
+func detectAudioFormat(data []byte) string {
+	if len(data) < 4 {
+		return "unknown"
+	}
+	// WAV
+	if len(data) >= 12 && bytes.Equal(data[0:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WAVE")) {
+		return "WAV"
+	}
+	// MP3 (MPEG ADTS, layer III sync word)
+	if data[0] == 0xFF && (data[1]&0xE0) == 0xE0 {
+		return "MP3"
+	}
+	// OGG
+	if bytes.HasPrefix(data, []byte("OggS")) {
+		return "OGG"
+	}
+	// FLAC
+	if bytes.HasPrefix(data, []byte("fLaC")) {
+		return "FLAC"
+	}
+	// AMR
+	if bytes.HasPrefix(data, []byte("#!AMR")) {
+		return "AMR"
+	}
+	// SILK (Tencent variant)
+	if bytes.HasPrefix(data, []byte("\x02#!SILK_V3")) || bytes.HasPrefix(data, []byte("#!SILK_V3")) {
+		return "SILK"
+	}
+	// MP4/AAC
+	if len(data) >= 12 && bytes.Equal(data[4:8], []byte("ftyp")) {
+		return "MP4/AAC"
+	}
+	return fmt.Sprintf("unknown(hex:%X)", data[:min(16, len(data))])
+}
+
+// wavToPcm 直接从 WAV 数据中提取 PCM 数据，无需 ffmpeg
+// 仅支持 16-bit 单声道 PCM WAV，且采样率需匹配 targetSampleRate
+// 如果数据不是 WAV 或不满足条件，返回 nil
+func wavToPcm(data []byte, targetSampleRate int) []byte {
+	if len(data) < 44 {
+		return nil
+	}
+	// 检查 RIFF/WAVE 头
+	if !bytes.Equal(data[0:4], []byte("RIFF")) || !bytes.Equal(data[8:12], []byte("WAVE")) {
+		return nil
+	}
+
+	var sampleRate, channels, bitsPerSample int
+	var dataChunk []byte
+	offset := 12
+	for offset < len(data)-8 {
+		chunkID := string(data[offset : offset+4])
+		chunkSize := int(binary.LittleEndian.Uint32(data[offset+4 : offset+8]))
+		if offset+8+chunkSize > len(data) {
+			break
+		}
+		switch chunkID {
+		case "fmt ":
+			if chunkSize < 16 {
+				return nil
+			}
+			audioFormat := binary.LittleEndian.Uint16(data[offset+8 : offset+10])
+			if audioFormat != 1 { // 1 = PCM (未压缩)
+				return nil // 非 PCM 格式需要 ffmpeg
+			}
+			channels = int(binary.LittleEndian.Uint16(data[offset+10 : offset+12]))
+			sampleRate = int(binary.LittleEndian.Uint32(data[offset+12 : offset+16]))
+			bitsPerSample = int(binary.LittleEndian.Uint16(data[offset+22 : offset+24]))
+		case "data":
+			dataChunk = data[offset+8 : offset+8+chunkSize]
+		}
+		offset += 8 + chunkSize
+		if chunkSize%2 == 1 { // RIFF 对齐填充
+			offset++
+		}
+	}
+
+	if dataChunk == nil || sampleRate == 0 {
+		return nil
+	}
+
+	// 如果采样率、声道数或位深不匹配，无法直接使用
+	if sampleRate != targetSampleRate || channels != 1 || bitsPerSample != 16 {
+		return nil
+	}
+
+	return dataChunk
+}
+
+// resamplePcm 对 16-bit 单声道 PCM 数据进行线性重采样
+func resamplePcm(data []byte, srcRate, dstRate int) []byte {
+	if srcRate == dstRate || len(data) < 2 {
+		return data
+	}
+	srcLen := len(data) / 2
+	dstLen := srcLen * dstRate / srcRate
+	if dstLen < 1 {
+		dstLen = 1
+	}
+	dst := make([]byte, dstLen*2)
+	for i := 0; i < dstLen; i++ {
+		srcPos := float64(i) * float64(srcRate) / float64(dstRate)
+		srcIdx := int(srcPos)
+		frac := srcPos - float64(srcIdx)
+		if srcIdx >= srcLen-1 {
+			s := binary.LittleEndian.Uint16(data[(srcLen-1)*2 : (srcLen-1)*2+2])
+			binary.LittleEndian.PutUint16(dst[i*2:i*2+2], s)
+		} else {
+			s0 := int16(binary.LittleEndian.Uint16(data[srcIdx*2 : srcIdx*2+2]))
+			s1 := int16(binary.LittleEndian.Uint16(data[(srcIdx+1)*2 : (srcIdx+1)*2+2]))
+			sample := int16(float64(s0)*(1-frac) + float64(s1)*frac)
+			binary.LittleEndian.PutUint16(dst[i*2:i*2+2], uint16(sample))
+		}
+	}
+	return dst
+}
+
+// stereoToMono 将 16-bit 立体声 PCM (左右交错) 转为单声道
+func stereoToMono(stereo []byte) []byte {
+	if len(stereo) < 4 {
+		return stereo
+	}
+	samples := len(stereo) / 4
+	mono := make([]byte, samples*2)
+	for i := 0; i < samples; i++ {
+		l := int(int16(binary.LittleEndian.Uint16(stereo[i*4 : i*4+2])))
+		r := int(int16(binary.LittleEndian.Uint16(stereo[i*4+2 : i*4+4])))
+		m := int16((l + r) / 2)
+		binary.LittleEndian.PutUint16(mono[i*2:i*2+2], uint16(m))
+	}
+	return mono
+}
+
+// mp3ToPcm 使用纯 Go 解码 MP3 为 16-bit 单声道 PCM
+func mp3ToPcm(data []byte, targetSampleRate int) ([]byte, error) {
+	decoder, err := mp3.NewDecoder(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("mp3 decoder init: %w", err)
+	}
+	srcRate := decoder.SampleRate()
+
+	var buf bytes.Buffer
+	_, err = io.CopyN(&buf, decoder, int64(math.MaxInt32)) // 限制最大约 2GB
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("mp3 decode: %w", err)
+	}
+	pcm := buf.Bytes() // 16-bit 立体声交错
+
+	// MP3 输出始终为立体声
+	mono := stereoToMono(pcm)
+	return resamplePcm(mono, srcRate, targetSampleRate), nil
+}
+
+// decodeToPcm 尝试内置解码器将音频转为 PCM
+func decodeToPcm(data []byte, targetSampleRate int) []byte {
+	// 1. 优先 WAV 直接提取
+	if pcm := wavToPcm(data, targetSampleRate); pcm != nil {
+		mylog.Printf("解码: 从 WAV 直接提取 PCM")
+		return pcm
+	}
+
+	fmt := detectAudioFormat(data)
+	mylog.Printf("解码: 音频格式 %s", fmt)
+
+	// 2. 尝试 MP3 解码
+	if strings.HasPrefix(fmt, "MP3") {
+		pcm, err := mp3ToPcm(data, targetSampleRate)
+		if err != nil {
+			mylog.Errorf("MP3 解码失败: %v", err)
+			return nil
+		}
+		mylog.Printf("MP3 解码成功 (%d bytes PCM)", len(pcm))
+		return pcm
+	}
+
+	mylog.Printf("解码: 格式 %s 无内置解码器，尝试 ffmpeg", fmt)
+	return nil
+}
+
 // encode 将音频编码为Silk
 func encode(record []byte, tempName string) (silkWav []byte) {
 	// 0. 创建缓存目录
@@ -143,54 +326,48 @@ func encode(record []byte, tempName string) (silkWav []byte) {
 	if err != nil {
 		fmt.Printf("创建语音缓存目录失败：%v\n", err)
 	}
-	// 1. 写入缓存文件
-	rawPath := path.Join(silkCachePath, tempName+".wav")
-	err = os.WriteFile(rawPath, record, os.ModePerm)
-	if err != nil {
-		mylog.Errorf("write temp file error")
-		return nil
-	}
-	defer os.Remove(rawPath)
 
-	// 2.转换pcm
 	sampleRate := config.GetRecordSampleRate() // 获取采样率
 	bitRate := config.GetRecordBitRate()       // 获取比特率
 	mylog.Printf("sampleRate%v", sampleRate)
 	mylog.Printf("bitRate%v", bitRate)
+
 	pcmPath := path.Join(silkCachePath, tempName+".pcm")
-	cmd := exec.Command("ffmpeg", "-i", rawPath, "-f", "s16le", "-ar", strconv.Itoa(sampleRate), "-ac", "1", pcmPath)
-	if errors.Is(cmd.Err, exec.ErrDot) {
-		cmd.Err = nil
-	}
-	if err = cmd.Run(); err != nil {
-		mylog.Errorf("convert pcm file error")
-		return nil
+
+	// 1. 优先使用内置解码器（WAV/MP3/OGG/FLAC，无需 ffmpeg）
+	pcmData := decodeToPcm(record, sampleRate)
+	if pcmData != nil {
+		mylog.Printf("使用内置解码器转换 PCM 成功")
+		err = os.WriteFile(pcmPath, pcmData, os.ModePerm)
+		if err != nil {
+			mylog.Errorf("write pcm file error")
+			return nil
+		}
+	} else {
+		// 2. 回退 ffmpeg
+		audioFmt := detectAudioFormat(record)
+		mylog.Printf("回退: 尝试 ffmpeg 转换 %s", audioFmt)
+
+		rawPath := path.Join(silkCachePath, tempName+".raw")
+		err = os.WriteFile(rawPath, record, os.ModePerm)
+		if err != nil {
+			mylog.Errorf("write temp file error")
+			return nil
+		}
+		defer os.Remove(rawPath)
+
+		cmd := exec.Command("ffmpeg", "-i", rawPath, "-f", "s16le", "-ar", strconv.Itoa(sampleRate), "-ac", "1", pcmPath)
+		if errors.Is(cmd.Err, exec.ErrDot) {
+			cmd.Err = nil
+		}
+		if err = cmd.Run(); err != nil {
+			mylog.Errorf("convert pcm file error: ffmpeg 未安装或输入格式(%s)不受支持", audioFmt)
+			return nil
+		}
 	}
 	defer os.Remove(pcmPath)
 
-	//todo 有大佬可以试试完善go-silk 这部分编码转换
-	//努力了很久,都没成功播放
-
-	// 3. 转silk
-	// pcm, err := os.ReadFile(pcmPath)
-	// if err != nil {
-	// 	mylog.Printf("read pcm file err")
-	// 	return nil
-	// }
-	// //silkWav, err = silk.EncodePcmBuffToSilkv2(pcm, sampleRate, bitRate, true, false, 2)
-	// silkWav, err = silk.EncodePcmBuffToSilk(pcm, sampleRate, bitRate, true)
-	// if err != nil {
-	// 	mylog.Printf("silk encode error:%v", err)
-	// 	return nil
-	// }
-
 	silkPath := path.Join(silkCachePath, tempName+".silk")
-
-	// err = os.WriteFile(silkPath, silkWav, 0o666)
-	// if err != nil {
-	// 	mylog.Printf("silk encode error2")
-	// 	return nil
-	// }
 
 	// 调用silk_codec转换为Silk
 
@@ -239,7 +416,7 @@ func encode(record []byte, tempName string) (silkWav []byte) {
 	}
 
 	// 使用临时文件执行silk_codec
-	cmd = exec.Command(tmpFile.Name(), "pts", "-i", pcmPath, "-o", silkPath, "-s", strconv.Itoa(sampleRate))
+	cmd := exec.Command(tmpFile.Name(), "pts", "-i", pcmPath, "-o", silkPath, "-s", strconv.Itoa(sampleRate))
 	if err := cmd.Run(); err != nil {
 		mylog.Errorf("silk encode error: %v", err)
 		return nil

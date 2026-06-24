@@ -9,6 +9,7 @@ import (
 
 	"github.com/hoshinonyaruko/gensokyo/callapi"
 	"github.com/hoshinonyaruko/gensokyo/config"
+	"github.com/hoshinonyaruko/gensokyo/idmap"
 	"github.com/hoshinonyaruko/gensokyo/mylog"
 	"github.com/tencent-connect/botgo/dto"
 	"github.com/tencent-connect/botgo/openapi"
@@ -36,11 +37,23 @@ func init() {
 // HandleSendPrivateMsgWakeup 处理私聊互动召回消息
 // 逻辑高度复刻 HandleSendPrivateMsg，但适配 IsWakeup 参数并移除 ID 转换逻辑
 func HandleSendPrivateMsgWakeup(client callapi.Client, api openapi.OpenAPI, apiv2 openapi.OpenAPI, message callapi.ActionMessage) (string, error) {
-	// 1. 获取 UserID (直接断言，无需转换)
+	// 1. 获取 UserID，支持虚拟数字 ID → 真实 OpenID 自动转换
 	userID, ok := message.Params.UserID.(string)
-	if !ok || len(userID) != 32 {
-		mylog.Printf("send_private_msg_wakeup 错误: UserID 必须是 32 位字符串")
+	if !ok || userID == "" {
+		mylog.Printf("send_private_msg_wakeup 错误: UserID 为空")
 		return "", nil
+	}
+
+	// 如果不是 32 位 OpenID，尝试从 idmap 转换（虚拟数字 ID → 真实 OpenID）
+	if len(userID) != 32 {
+		realID, err := idmap.RetrieveRowByIDv2(userID)
+		if err == nil && len(realID) == 32 {
+			mylog.Printf("send_private_msg_wakeup: 虚拟ID %s → 真实OpenID %s", userID, realID)
+			userID = realID
+		} else {
+			mylog.Printf("send_private_msg_wakeup 错误: UserID 不是32位OpenID且无法转换: %s", userID)
+			return "", nil
+		}
 	}
 
 	// 此时 selfID 最好从配置或 message 中获取，这里演示用 0 或 message.SelfID (如果你的ActionMessage里有)
@@ -108,7 +121,7 @@ func HandleSendPrivateMsgWakeup(client callapi.Client, api openapi.OpenAPI, apiv
 		// 构造 MessageToCreate
 		groupMessage := &dto.MessageToCreate{
 			Content: messageText,
-			Media: dto.Media{
+			Media: &dto.Media{
 				FileInfo: fileInfo,
 			},
 			MsgType:  7,    // 富媒体类型
@@ -218,7 +231,7 @@ func HandleSendPrivateMsgWakeup(client callapi.Client, api openapi.OpenAPI, apiv
 				groupMessage := &dto.MessageToCreate{
 					Content:  " ", // 媒体消息通常带个空格
 					MsgType:  7,   // 富媒体
-					Media:    media,
+					Media:    &media,
 					IsWakeup: true, // [重点]
 					MsgID:    "",
 					EventID:  "",

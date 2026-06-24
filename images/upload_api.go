@@ -47,7 +47,7 @@ func CreateAndUploadMediaMessage(ctx context.Context, base64EncodedData, eventID
 	// 构造返回的MessageToCreate对象
 	groupMessage := &dto.MessageToCreate{
 		Content: content,
-		Media: dto.Media{
+		Media: &dto.Media{
 			FileInfo: fileInfo,
 		},
 		MsgID:   messageID,
@@ -80,7 +80,7 @@ func CreateAndUploadMediaMessagePrivate(ctx context.Context, base64EncodedData, 
 	// 构造返回的MessageToCreate对象
 	privateMessage := &dto.MessageToCreate{
 		Content: content,
-		Media: dto.Media{
+		Media: &dto.Media{
 			FileInfo: fileInfo,
 		},
 		MsgID:   messageID,

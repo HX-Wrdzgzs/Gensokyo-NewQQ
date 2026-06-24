@@ -21,6 +21,8 @@ type Settings struct {
 	ShardCount   int    `yaml:"shard_count"`
 	ShardID      int    `yaml:"shard_id"`
 	UseUin       bool   `yaml:"use_uin"`
+	IdmapIsolation     bool   `yaml:"idmap_isolation"`
+	IdmapLegacyCompat  bool   `yaml:"idmap_legacy_compat"`
 	ShardNum     int    `yaml:"shard_num"`
 	//事件订阅类
 	TextIntent []string `yaml:"text_intent"`
@@ -78,10 +80,15 @@ type Settings struct {
 	ForceSSL         bool     `yaml:"force_ssl"`
 	HttpPortAfterSSL string   `yaml:"http_port_after_ssl"`
 	//日志类
-	DeveloperLog     bool `yaml:"developer_log"`
-	LogLevel         int  `yaml:"log_level"`
-	SaveLogs         bool `yaml:"save_logs"`
-	LogSuffixPerMins int  `yaml:"log_suffix_per_mins"`
+	DeveloperLog            bool `yaml:"developer_log"`
+	LogLevel                int  `yaml:"log_level"`
+	SaveLogs                bool `yaml:"save_logs"`
+	LogSuffixPerMins        int  `yaml:"log_suffix_per_mins"`
+	LogColorEnabled         bool `yaml:"log_color_enabled"`
+	LogJsonOutput           bool `yaml:"log_json_output"`
+	LogMaxAgeDays           int  `yaml:"log_max_age_days"`
+	LogMaxSizeMB            int  `yaml:"log_max_size_mb"`
+	LogSlowEventThresholdMS int  `yaml:"log_slow_event_threshold_ms"`
 	//webui相关
 	DisableWebui bool   `yaml:"disable_webui"`
 	Username     string `yaml:"server_user_name"`
@@ -204,6 +211,10 @@ type Settings struct {
 	AliyunAccessKeySecret string `yaml:"a_OSS_AccessKeySecret"`
 	AliyunBucketName      string `yaml:"a_OSS_BucketName"`
 	AliyunAudit           bool   `yaml:"a_audit"`
+	// 额外 intent 位探测（用于发现未文档化的事件位）
+	ExtraIntents []int `yaml:"extra_intents"`
+	// 发现未知事件开关——自动订阅所有未使用的 intent 位
+	DiscoverUnknownEvents bool `yaml:"discover_unknown_events"`
 }
 
 type VisualPrefixConfig struct {

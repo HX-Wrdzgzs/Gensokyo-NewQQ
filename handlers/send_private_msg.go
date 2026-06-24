@@ -222,7 +222,7 @@ func HandleSendPrivateMsg(client callapi.Client, api openapi.OpenAPI, apiv2 open
 			echo.AddMappingSeq(messageID, msgseq+1)
 			groupMessage := &dto.MessageToCreate{
 				Content: messageText, // 添加文本内容
-				Media: dto.Media{
+				Media: &dto.Media{
 					FileInfo: fileInfo, // 添加图像信息
 				},
 				MsgID:   messageID,
@@ -282,7 +282,6 @@ func HandleSendPrivateMsg(client callapi.Client, api openapi.OpenAPI, apiv2 open
 				// 进行类型断言
 				richMediaMessage, ok := groupReply.(*dto.RichMediaMessage)
 				if !ok {
-					mylog.Printf("Error: Expected RichMediaMessage type for key %s.", key)
 					// 定义一个map来存储关键字
 					keyMap := map[string]bool{
 						"markdown":      true,
@@ -375,7 +374,7 @@ func HandleSendPrivateMsg(client callapi.Client, api openapi.OpenAPI, apiv2 open
 						EventID: eventID,
 						MsgSeq:  msgseq,
 						MsgType: 7, // 默认文本类型
-						Media:   media,
+						Media:   &media,
 					}
 					groupMessage.Timestamp = time.Now().Unix() // 设置时间戳
 					//重新为err赋值

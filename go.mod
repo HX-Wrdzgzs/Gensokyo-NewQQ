@@ -12,6 +12,7 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.4.2
+	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/tencent-connect/botgo v0.1.6
