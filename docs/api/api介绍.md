@@ -64,6 +64,7 @@
 | `get_group_ban` | set_group_ban.go | `q群 (Group Chat)` | 兼容入口，处理逻辑等同 `set_group_ban`。 |
 | `get_group_whole_ban` | set_group_whole_ban.go | `q群 (Group Chat)` | 兼容入口，处理逻辑等同 `set_group_whole_ban`。 |
 | `send_to_group` | send_group_msg.go | `q群 (Group Chat)` | `send_group_msg` 别名。 |
+| [`delete_group_msg`](./扩展api/扩展api-delete_group_msg.md) | delete_group_msg.go | `q群 (Group Chat)` | 撤回群内指定用户或 Bot 自身的消息；支持自动查找最后一条消息。 |
 
 ## 消息事件扩展字段
 

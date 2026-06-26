@@ -1723,10 +1723,13 @@ func SendMessage(messageText string, data interface{}, messageType string, api o
 		msgseq := echo.GetMappingSeq(msg.ID)
 		echo.AddMappingSeq(msg.ID, msgseq+1)
 		textMsg, _ := GenerateReplyMessage(msg.ID, nil, messageText, msgseq+1, nil)
-		_, err := apiv2.PostGroupMessage(context.TODO(), msg.GroupID, textMsg)
+		response, err := apiv2.PostGroupMessage(context.TODO(), msg.GroupID, textMsg)
 		if err != nil {
 			mylog.Printf("发送文本群组信息失败: %v", err)
 			return err
+		}
+		if response != nil && response.Message != nil {
+			idmap.StoreLatestBotMsgID(msg.GroupID, response.Message.ID)
 		}
 
 	case "guild_private":
@@ -2228,59 +2231,6 @@ func ProcessCQMemberOutbound(text string, eventID *string, groupID string, apiv2
 	})
 
 	return result, realTargetGroupID, cqUserID
-}
-
-// ProcessCQRemoveOutbound 处理出站 [CQ:remove,user_id=用户ID,message_id=消息ID]。
-// user_id 和 message_id 默认自动解析；message_id 省略时由调用方查找该用户的最后一条消息。
-// msg_id 作为 message_id 的兼容别名保留。
-func ProcessCQRemoveOutbound(text string) (string, string, string) {
-	var cqUserID, cqMsgID string
-	re := regexp.MustCompile(`\[CQ:remove,([^\]]*)\]`)
-	result := re.ReplaceAllStringFunc(text, func(match string) string {
-		inner := match[1 : len(match)-1]
-		for _, part := range strings.Split(inner, ",") {
-			kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
-			if len(kv) == 2 {
-				switch strings.TrimSpace(kv[0]) {
-				case "user_id":
-					cqUserID = strings.TrimSpace(kv[1])
-				case "message_id", "msg_id":
-					cqMsgID = strings.TrimSpace(kv[1])
-				}
-			}
-		}
-		return ""
-	})
-
-	if cqUserID == "" {
-		mylog.Printf("[CQ:remove] user_id 为空，跳过撤回")
-		return result, "", ""
-	}
-
-	// 沿用本地 ID 行为：vUIN 自动反查，OpenID 原样通过。
-	openID := idmap.ResolveOriginalID(cqUserID)
-	if openID == "" || (openID == cqUserID && regexp.MustCompile(`^\d+$`).MatchString(cqUserID)) {
-		mylog.Printf("[CQ:remove] user_id=%s 自动解析 OpenID 失败", cqUserID)
-		return result, "", ""
-	}
-
-	if cqMsgID == "" {
-		mylog.Printf("[CQ:remove] user_id=%s → %s，未指定 message_id，将查找该用户最后一条消息", cqUserID, openID)
-		return result, openID, ""
-	}
-
-	// 虚拟 message_id 自动反查；真实 message_id 则原样通过。
-	realMsgID, err := idmap.RetrieveMsgID(cqMsgID)
-	if err != nil || realMsgID == "" {
-		if regexp.MustCompile(`^\d+$`).MatchString(cqMsgID) {
-			mylog.Printf("[CQ:remove] message_id=%s 自动解析失败", cqMsgID)
-			return result, "", ""
-		}
-		realMsgID = cqMsgID
-	}
-
-	mylog.Printf("[CQ:remove] user_id=%s → %s, message_id=%s → %s", cqUserID, openID, cqMsgID, realMsgID)
-	return result, openID, realMsgID
 }
 
 // parseMarkdownFromMessage 从 base64 编码的 markdown JSON 数据中解析 dto.Markdown + keyboard

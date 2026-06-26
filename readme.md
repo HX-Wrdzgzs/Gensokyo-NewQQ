@@ -158,6 +158,7 @@ todo,正在施工...
 | /send_guild_channel_msg | [发送 q頻 (QQ Guild) 消息] |
 | /send_msg | [发送消息] |
 | /delete_msg              | [撤回信息]             |
+| /delete_group_msg        | [撤回QQ群用户或Bot消息] |
 | /set_group_kick          | [q群 (Group Chat) 踢人] |
 | /set_group_ban | [q群 (Group Chat) 单人禁言] |
 | /set_group_whole_ban | [q群 (Group Chat) 全员禁言] |

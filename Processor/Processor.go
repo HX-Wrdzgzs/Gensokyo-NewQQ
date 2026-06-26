@@ -1011,10 +1011,13 @@ func SendMessage(messageText string, data interface{}, messageType string, api o
 		msgseq := echo.GetMappingSeq(msg.ID)
 		echo.AddMappingSeq(msg.ID, msgseq+1)
 		textMsg, _ := handlers.GenerateReplyMessage(msg.ID, nil, messageText, msgseq+1, nil)
-		_, err := apiv2.PostGroupMessage(context.TODO(), msg.GroupID, textMsg)
+		response, err := apiv2.PostGroupMessage(context.TODO(), msg.GroupID, textMsg)
 		if err != nil {
 			mylog.Printf("发送文本群组信息失败: %v", err)
 			return err
+		}
+		if response != nil && response.Message != nil {
+			idmap.StoreLatestBotMsgID(msg.GroupID, response.Message.ID)
 		}
 
 	case "guild_private":
@@ -1103,10 +1106,13 @@ func SendMessageMd(md *dto.Markdown, kb *keyboard.MessageKeyboard, data interfac
 			MsgType:  2, //md信息
 		}
 		Message.Timestamp = time.Now().Unix() // 设置时间戳
-		_, err := apiv2.PostGroupMessage(context.TODO(), msg.GroupID, Message)
+		response, err := apiv2.PostGroupMessage(context.TODO(), msg.GroupID, Message)
 		if err != nil {
 			mylog.Printf("发送文本群组信息失败: %v", err)
 			return err
+		}
+		if response != nil && response.Message != nil {
+			idmap.StoreLatestBotMsgID(msg.GroupID, response.Message.ID)
 		}
 
 	case "guild_private":

@@ -139,7 +139,7 @@ func (p *Processors) ProcessGroupNormalMessage(data *dto.WSGroupMessageData) err
 		messageID = int(messageID64)
 		mylog.Printf("[message] group msg_id mapped: raw_msg=%s vMsg=%d", data.ID, messageID64)
 	}
-	// 记录该群该用户最新一条消息的 real msg_id（用于 [CQ:remove] 撤回）
+	// 记录该群该用户最新一条消息的 real msg_id（用于 delete_group_msg 撤回）
 	idmap.StoreLatestMsgID(data.GroupID, data.Author.ID, data.ID)
 
 	if config.GetAutoBind() {
