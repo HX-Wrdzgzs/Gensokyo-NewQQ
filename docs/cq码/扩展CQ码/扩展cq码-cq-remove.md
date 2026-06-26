@@ -1,57 +1,60 @@
-# [CQ:remove] — 撤回用户最近消息
+# [CQ:remove] — 撤回指定消息
 
 ## 说明
 
-出站 CQ 码，用于撤回指定用户在**当前群**最近一条消息。
-
-> 与 `delete_msg` API 不同：`[CQ:remove]` 无需显式传入 `message_id`，Gensokyo 内部自动查找目标用户在该群的最近消息 ID 并撤回。
+出站 CQ 码，用于撤回指定用户的**指定消息**。`msg_id` 使用 OneBot V11 事件中传递的虚拟 `message_id`，无需插件自行维护 ID 映射。
 
 ## 格式
 
 ```
-[CQ:remove,user_id=虚拟用户ID]
+[CQ:remove,user_id=虚拟用户ID,msg_id=虚拟消息ID]
 ```
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `user_id` | int64 | 目标用户的**虚拟 ID**（Gensokyo 转换后的数字 ID） |
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:--:|------|
+| `user_id` | int64 | ✅ | 目标用户的**虚拟 ID** |
+| `msg_id` | int64 | ✅ | 要撤回的消息**虚拟 ID**（取自 OneBot 事件 `message_id`） |
 
 ## 流程
 
 ```
-① 后端插件调用 send_group_msg
-   send_group_msg(group_id=821404315, message="[CQ:remove,user_id=3607918353]")
+① 后端插件从 OneBot 事件获取 message_id
+   event.message_id = 5678（虚拟 ID）
 
-② Gensokyo 解析 CQ 码
+② 调用 send_group_msg 携带 CQ 码
+   send_group_msg(group_id=821404315, message="[CQ:remove,user_id=3607918353,msg_id=5678]")
+
+③ Gensokyo 解析 CQ 码
    - 剥离 [CQ:remove,...]，不发送到 QQ 频道
-   - 虚拟 user_id → 真实 OpenID 反向转换
-   - 从 msg 数据库查找该用户在该群的最近一条 message_id（6 分钟 TTL）
+   - 虚拟 user_id → 真实 OpenID（idmap.RetrieveRowByIDv2）
+   - 虚拟 msg_id → 真实 message_id（idmap.RetrieveMsgID）
 
-③ Gensokyo 调用 QQ API 撤回
+④ Gensokyo 调用 QQ API 撤回
    api.RetractGroupMessage(groupOpenID, realMsgID)
 
-④ 若 messageText 剥离后为空，跳过发送（不发空消息）
+⑤ 若 messageText 剥离后为空，跳过发送
 ```
 
 ## 限制
 
 | 限制 | 说明 |
 |------|------|
-| 时效 | 只能撤回 **6 分钟内**的消息（与 QQ 官方撤回窗口对齐，msg 数据库 TTL 设为 6 分钟） |
+| 时效 | 只能撤回 **6 分钟内**的消息（msg 数据库 TTL） |
 | 范围 | 仅群聊 |
-| 权限 | 需机器人为群管理员（QQ API 要求） |
+| 权限 | 需机器人为群管理员 |
 
 ## 后端示例（nonebot2）
 
 ```python
-from nonebot.adapters.onebot.v11 import Bot, Message
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message
 
 @on_command("撤回").handle()
-async def recall_last(bot: Bot, event, args):
-    target_uid = extract_user_id(event, args)  # 获取目标用户的虚拟 ID
+async def recall_msg(bot: Bot, event: GroupMessageEvent):
+    msg_id = event.message_id   # OneBot 事件自带的虚拟消息 ID
+    user_id = event.user_id
     await bot.send_group_msg(
         group_id=event.group_id,
-        message=Message(f"[CQ:remove,user_id={target_uid}]")
+        message=Message(f"[CQ:remove,user_id={user_id},msg_id={msg_id}]")
     )
 ```
 
@@ -59,10 +62,9 @@ async def recall_last(bot: Bot, event, args):
 
 | 模块 | 职责 |
 |------|------|
-| `idmap.StoreLatestMsgID` | 群消息入站时记录 `(groupOpenID, userOpenID) → realMsgID` |
-| `idmap.GetLatestMsgID` | 出站 CQ 码触发时查询最近消息 ID |
-| `idmap.cleanExpiredLatestMsg` | 每分钟清理 ≥6 分钟的过期索引 |
-| `handlers.ProcessCQRemoveOutbound` | 解析 `[CQ:remove,...]`，剥离 CQ 码，转换用户 ID |
+| `idmap.RetrieveMsgID` | 虚拟 msg_id → 真实消息 ID 转换 |
+| `idmap.RetrieveRowByIDv2` | 虚拟 user_id → 真实 OpenID 转换 |
+| `handlers.ProcessCQRemoveOutbound` | 解析 `[CQ:remove,...]`，剥离 CQ 码，转换 ID |
 
 ## 适用范围
 

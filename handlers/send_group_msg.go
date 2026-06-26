@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -424,11 +425,11 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 				mylog.Printf("[CQ:member] CQ 码 group_id 已转为 OpenID=%s", realGroupID)
 			}
 
-			// 处理出站 [CQ:remove,user_id=虚拟ID] → 撤回该用户最近一条消息
+			// 处理出站 [CQ:remove,user_id=虚拟ID,msg_id=虚拟消息ID] → 撤回指定消息
 			if strings.Contains(messageText, "[CQ:remove,") {
-				var targetUserOpenID string
-				messageText, targetUserOpenID = ProcessCQRemoveOutbound(messageText)
-				if targetUserOpenID != "" {
+				var recallOK bool
+				messageText, targetUserOpenID, realMsgID := ProcessCQRemoveOutbound(messageText)
+				if targetUserOpenID != "" && realMsgID != "" {
 					// 将群 ID 转为真实 OpenID
 					groupOpenID := message.Params.GroupID.(string)
 					if len(groupOpenID) != 32 {
@@ -440,22 +441,32 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 						}
 					}
 					if groupOpenID != "" {
-						realMsgID, err := idmap.GetLatestMsgID(groupOpenID, targetUserOpenID)
-						if err != nil || realMsgID == "" {
-							mylog.Printf("[CQ:remove] 未找到用户最近消息: group=%s user=%s", groupOpenID, targetUserOpenID)
+						mylog.Printf("[CQ:remove] 撤回消息: group=%s user=%s msgID=%s", groupOpenID, targetUserOpenID, realMsgID)
+						err := apiv2.RetractGroupMessage(context.TODO(), groupOpenID, realMsgID, openapi.RetractMessageOptionHidetip)
+						if err != nil {
+							mylog.Printf("[CQ:remove] 撤回失败: %v", err)
 						} else {
-							mylog.Printf("[CQ:remove] 撤回消息: group=%s user=%s msgID=%s", groupOpenID, targetUserOpenID, realMsgID)
-							err := apiv2.RetractGroupMessage(context.TODO(), groupOpenID, realMsgID, openapi.RetractMessageOptionHidetip)
-							if err != nil {
-								mylog.Printf("[CQ:remove] 撤回失败: %v", err)
-							}
+							recallOK = true
 						}
 					}
 				}
-				// 剥离后消息为空 → 不发送到频道
+				// 剥离后消息为空 → 给客户端回执，不发送到频道
 				if messageText == "" {
 					mylog.Printf("[CQ:remove] 消息仅含 CQ 码，已剥离，跳过发送")
-					return "", nil
+					response := map[string]interface{}{
+						"status":  "ok",
+						"retcode": 0,
+						"data":    nil,
+						"message": "",
+					}
+					if recallOK {
+						response["message"] = "recall ok"
+					}
+					response["echo"] = message.Echo
+					outputMap := response
+					client.SendMessage(outputMap)
+					result, _ := json.Marshal(response)
+					return string(result), nil
 				}
 			}
 

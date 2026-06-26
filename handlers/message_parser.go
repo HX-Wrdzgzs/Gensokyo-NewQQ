@@ -2220,32 +2220,51 @@ func ProcessCQMemberOutbound(text string, eventID *string, groupID string, apiv2
 	return result, realTargetGroupID, cqUserID
 }
 
-// ProcessCQRemoveOutbound 处理出站 [CQ:remove,user_id=虚拟用户ID]
-// 剥离 CQ 码，将虚拟 user_id 转为真实 OpenID
-// 返回: (清理后的文本, 真实用户OpenID)
-func ProcessCQRemoveOutbound(text string) (string, string) {
-	var cqUserID string
-	re := regexp.MustCompile(`\[CQ:remove,user_id=([^,\]]*)\]`)
+// ProcessCQRemoveOutbound 处理出站 [CQ:remove,user_id=虚拟用户ID,msg_id=虚拟消息ID]
+// 剥离 CQ 码，将虚拟 user_id/msg_id 转为真实 OpenID/消息 ID
+// 返回: (清理后的文本, 真实用户OpenID, 真实消息ID)
+func ProcessCQRemoveOutbound(text string) (string, string, string) {
+	var cqUserID, cqMsgID string
+	re := regexp.MustCompile(`\[CQ:remove,([^\]]*)\]`)
 	result := re.ReplaceAllStringFunc(text, func(match string) string {
-		sub := re.FindStringSubmatch(match)
-		if len(sub) == 2 {
-			cqUserID = strings.TrimSpace(sub[1])
+		inner := match[1 : len(match)-1]
+		for _, part := range strings.Split(inner, ",") {
+			kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
+			if len(kv) == 2 {
+				switch strings.TrimSpace(kv[0]) {
+				case "user_id":
+					cqUserID = strings.TrimSpace(kv[1])
+				case "msg_id":
+					cqMsgID = strings.TrimSpace(kv[1])
+				}
+			}
 		}
 		return ""
 	})
 
-	if cqUserID == "" {
-		return result, ""
+	if cqUserID == "" || cqMsgID == "" {
+		if cqMsgID == "" {
+			mylog.Printf("[CQ:remove] msg_id 为空，跳过撤回")
+		}
+		return result, "", ""
 	}
 
-	// 将虚拟 user_id 反向转换为 OpenID
+	// 虚拟 user_id → 真实 OpenID
 	openID, err := idmap.RetrieveRowByIDv2(cqUserID)
 	if err != nil || openID == "" {
-		mylog.Printf("[CQ:remove] user_id=%s 转换为 OpenID 失败: %v", cqUserID, err)
-		return result, ""
+		mylog.Printf("[CQ:remove] user_id=%s 转换 OpenID 失败: %v", cqUserID, err)
+		return result, "", ""
 	}
-	mylog.Printf("[CQ:remove] user_id=%s → OpenID=%s", cqUserID, openID)
-	return result, openID
+
+	// 虚拟 msg_id → 真实消息 ID
+	realMsgID, err := idmap.RetrieveMsgID(cqMsgID)
+	if err != nil || realMsgID == "" {
+		mylog.Printf("[CQ:remove] msg_id=%s 转换消息 ID 失败: %v", cqMsgID, err)
+		return result, "", ""
+	}
+
+	mylog.Printf("[CQ:remove] user_id=%s → %s, msg_id=%s → %s", cqUserID, openID, cqMsgID, realMsgID)
+	return result, openID, realMsgID
 }
 
 // parseMarkdownFromMessage 从 base64 编码的 markdown JSON 数据中解析 dto.Markdown + keyboard
