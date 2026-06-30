@@ -29,6 +29,11 @@ $env:GOPROXY = 'https://mirrors.aliyun.com/goproxy,https://goproxy.cn,https://mi
 $env:GOFLAGS = '-mod=mod'
 $env:CGO_ENABLED = '0'
 
+# 兼容 --xxx 写法（PowerShell 标准是 -xxx）
+if ($TargetOS -match '^--?[Aa]ll$') { $All = $true; $TargetOS = '' }
+if ($TargetOS -match '^--?[Nn]o[Ww]eb[Uu][Ii]$') { $NoWebUI = $true; $TargetOS = '' }
+if ($TargetArch -match '^--?[Nn]o[Ww]eb[Uu][Ii]$') { $NoWebUI = $true; $TargetArch = '' }
+
 if ($TargetOS -eq 'all') {
     $All = $true
     $TargetOS = ''
