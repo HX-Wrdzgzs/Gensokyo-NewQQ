@@ -175,8 +175,8 @@ const LEGEND_NAMES = {
       toolbar: { show: false },
       fontFamily: 'Inter, sans-serif',
       animations: {
-        enabled: false,
-        dynamicAnimation: { enabled: false },
+        animateGradually: { enabled: false },
+        dynamicAnimation: { enabled: true, speed: 300 },
       },
     },
     dataLabels: { enabled: false },
