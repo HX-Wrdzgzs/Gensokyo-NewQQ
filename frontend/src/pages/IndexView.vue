@@ -193,6 +193,15 @@ const LEGEND_NAMES = {
     },
     stroke: { curve: 'smooth' as const, width: 2 },
     grid: { borderColor: 'var(--gsk-border)' },
+    fill: {
+      type: 'gradient',
+      gradient: {
+        shadeIntensity: 0.3,
+        opacityFrom: 0.6,
+        opacityTo: 0.05,
+        type: 'horizontal',
+      },
+    },
     legend: {
       position: 'bottom' as const,
       labels: { colors: 'var(--gsk-text-secondary)' },
@@ -201,7 +210,7 @@ const LEGEND_NAMES = {
   },
   chartSeries = Object.values(LEGEND_NAMES).map((name) => ({
     name,
-    data: [] as { x: number; y: number }[],
+    data: [{ x: Date.now(), y: 0 }] as { x: number; y: number }[],
   })),
   chart = ref<VueApexChartsComponent>();
 
