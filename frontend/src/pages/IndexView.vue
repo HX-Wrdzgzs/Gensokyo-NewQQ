@@ -207,8 +207,8 @@ function formatBytes(bytes: number, decimals = 2) {
   const dm = decimals < 0 ? 0 : decimals;
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  const val = parseFloat((bytes / Math.pow(k, i)).toFixed(dm));
-  return String(val) + ' ' + sizes[i];
+  const val = (bytes / Math.pow(k, i)).toFixed(dm);
+  return val + ' ' + sizes[i];
 }
 
 let updateTimer: number;
