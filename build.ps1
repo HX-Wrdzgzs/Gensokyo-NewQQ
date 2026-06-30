@@ -5,6 +5,7 @@
 # All default targets:
 #   .\build.ps1 -All
 #   .\build.ps1 -LinuxOnly
+# Default is -Small (精简版)，用 -NoSmall 编译完整版
 
 param(
     [Parameter(Position = 0)]
@@ -19,7 +20,7 @@ param(
     [switch]$All,
     [switch]$LinuxOnly,
     [switch]$NoUPX,
-    [switch]$Small
+    [switch]$NoSmall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -77,15 +78,16 @@ function Invoke-GensokyoBuild {
         [Parameter(Mandatory = $true)]
         [string]$Ldflags,
 
-        [switch]$Small
+        [switch]$NoSmall
     )
 
     $env:GOOS = $Target.GOOS
     $env:GOARCH = $Target.GOARCH
 
     $ext = if ($Target.GOOS -eq 'windows') { '.exe' } else { '' }
-    $nameSuffix = if ($Small) { '-small' } else { '' }
-    $tagArg = if ($Small) { '-tags=small' } else { '' }
+    $small = -not $NoSmall
+    $nameSuffix = if ($small) { '-small' } else { '' }
+    $tagArg = if ($small) { '-tags=small' } else { '' }
     $outName = "gensokyo$nameSuffix-$($Target.OS)-$($Target.Arch)$ext"
 
     Write-Host "[build] $($Target.GOOS)/$($Target.GOARCH) -> $outName" -ForegroundColor Yellow
@@ -159,8 +161,8 @@ $outputs = @()
 $failed = @()
 foreach ($target in $targets) {
     try {
-        $smallParam = if ($Small) { @{ Small = $true } } else { @{} }
-        $outputs += Invoke-GensokyoBuild -Target $target -Ldflags $ldflags @smallParam
+        $noSmallParam = if ($NoSmall) { @{ NoSmall = $true } } else { @{} }
+        $outputs += Invoke-GensokyoBuild -Target $target -Ldflags $ldflags @noSmallParam
     } catch {
         $failed += "$($target.GOOS)/$($target.GOARCH)"
         Write-Host "  FAILED: $($target.GOOS)/$($target.GOARCH)" -ForegroundColor Red
