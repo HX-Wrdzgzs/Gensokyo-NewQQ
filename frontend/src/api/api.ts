@@ -598,7 +598,13 @@ export interface SystemMemoryDetail {
      */
     'available': number;
     /**
-     * 
+     *
+     * @type {number}
+     * @memberof SystemMemoryDetail
+     */
+    'used': number;
+    /**
+     *
      * @type {number}
      * @memberof SystemMemoryDetail
      */

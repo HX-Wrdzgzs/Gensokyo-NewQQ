@@ -2390,17 +2390,6 @@ func GetServerTempQQguildPool() []string {
 	return nil // 返回nil，如果instance为nil
 }
 
-// 获取UploadPicV2Base64开关
-func GetUploadPicV2Base64() bool {
-	mu.RLock()
-	defer mu.RUnlock()
-
-	if instance == nil {
-		fmt.Println("Warning: instance is nil when trying to UploadPicV2 value.")
-		return false
-	}
-	return instance.Settings.UploadPicV2Base64
-}
 
 // 获取 AutoWithdraw 数组
 func GetAutoWithdraw() []string {

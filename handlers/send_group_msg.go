@@ -1047,51 +1047,49 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 			Content:    "",         // 这个字段文档没有了
 			SrvSendMsg: false,
 		}
-	} else if voiceURLs, ok := foundItems["base64_record"]; ok && len(voiceURLs) > 0 {
+	} else if base64URLs, ok := foundItems["base64_record"]; ok && len(base64URLs) > 0 {
 		// 适配base64 slik
-		if base64_record, ok := foundItems["base64_record"]; ok && len(base64_record) > 0 {
-			// 解码base64语音数据
-			fileRecordData, err := base64.StdEncoding.DecodeString(base64_record[0])
-			if err != nil {
-				mylog.Printf("failed to decode base64 record: %v", err)
+		// 解码base64语音数据
+		fileRecordData, err := base64.StdEncoding.DecodeString(base64URLs[0])
+		if err != nil {
+			mylog.Printf("failed to decode base64 record: %v", err)
+			return nil
+		}
+		//判断并转码
+		if !silk.IsAMRorSILK(fileRecordData) {
+			mt, ok := silk.CheckAudio(bytes.NewReader(fileRecordData))
+			if !ok {
+				mylog.Errorf("voice type error: %s", mt)
 				return nil
 			}
-			//判断并转码
-			if !silk.IsAMRorSILK(fileRecordData) {
-				mt, ok := silk.CheckAudio(bytes.NewReader(fileRecordData))
-				if !ok {
-					mylog.Errorf("voice type error: %s", mt)
-					return nil
-				}
-				fileRecordData = silk.EncoderSilk(fileRecordData)
-				mylog.Printf("音频转码ing")
-			}
-			if len(fileRecordData) == 0 {
-				mylog.Errorf("语音转码失败，返回空数据")
-				return &dto.MessageToCreate{
-					Content: "错误: 语音转码失败，请检查 ffmpeg 是否安装",
-					MsgID:   id,
-					EventID: eventid,
-					MsgSeq:  msgseq,
-					MsgType: 0, // 默认文本类型
-				}
-			}
-			base64Encoded := base64.StdEncoding.EncodeToString(fileRecordData)
-			// 语音直接 base64 上传到 QQ CDN，不需要本地图床中转
-			messageToCreate, err := images.CreateAndUploadMediaMessage(context.TODO(), base64Encoded, eventid, 3, false, "", groupid, id, msgseq, apiv2)
-			if err != nil {
-				mylog.Printf("Error messageToCreate: %v", err)
-				return &dto.MessageToCreate{
-					Content: "错误: 上传语音失败",
-					MsgID:   id,
-					EventID: eventid,
-					MsgSeq:  msgseq,
-					MsgType: 0, // 默认文本类型
-				}
-			}
-			return messageToCreate
+			fileRecordData = silk.EncoderSilk(fileRecordData)
+			mylog.Printf("音频转码ing")
 		}
-	} else if imageURLs, ok := foundItems["url_record"]; ok && len(imageURLs) > 0 {
+		if len(fileRecordData) == 0 {
+			mylog.Errorf("语音转码失败，返回空数据")
+			return &dto.MessageToCreate{
+				Content: "错误: 语音转码失败，请检查 ffmpeg 是否安装",
+				MsgID:   id,
+				EventID: eventid,
+				MsgSeq:  msgseq,
+				MsgType: 0, // 默认文本类型
+			}
+		}
+		base64Encoded := base64.StdEncoding.EncodeToString(fileRecordData)
+		// 语音直接 base64 上传到 QQ CDN，不需要本地图床中转
+		messageToCreate, err := images.CreateAndUploadMediaMessage(context.TODO(), base64Encoded, eventid, 3, false, "", groupid, id, msgseq, apiv2)
+		if err != nil {
+			mylog.Printf("Error messageToCreate: %v", err)
+			return &dto.MessageToCreate{
+				Content: "错误: 上传语音失败",
+				MsgID:   id,
+				EventID: eventid,
+				MsgSeq:  msgseq,
+				MsgType: 0, // 默认文本类型
+			}
+		}
+		return messageToCreate
+	} else if recordURLs, ok := foundItems["url_record"]; ok && len(recordURLs) > 0 {
 		// 从URL下载语音
 		resp, err := http.Get("http://" + imageURLs[0])
 		if err != nil {
@@ -1151,9 +1149,9 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 			Content:    "",     // 这个字段文档没有了
 			SrvSendMsg: false,
 		}
-	} else if imageURLs, ok := foundItems["url_records"]; ok && len(imageURLs) > 0 {
-		// 从URL下载语音
-		resp, err := http.Get("https://" + imageURLs[0])
+	} else if recordURLs, ok := foundItems["url_records"]; ok && len(recordURLs) > 0 {
+// 从URL下载语音
+resp, err := http.Get("https://" + recordURLs[0])
 		if err != nil {
 			mylog.Printf("Error downloading the record: %v", err)
 			return &dto.MessageToCreate{
@@ -1556,11 +1554,10 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 			Content:    "",         // 这个字段文档没有了
 			SrvSendMsg: false,
 		}
-	} else if voiceURLs, ok := foundItems["base64_record"]; ok && len(voiceURLs) > 0 {
+	} else if base64URLs, ok := foundItems["base64_record"]; ok && len(base64URLs) > 0 {
 		// 适配base64 slik
-		if base64_record, ok := foundItems["base64_record"]; ok && len(base64_record) > 0 {
-			// 解码base64语音数据
-			fileRecordData, err := base64.StdEncoding.DecodeString(base64_record[0])
+		// 解码base64语音数据
+		fileRecordData, err := base64.StdEncoding.DecodeString(base64URLs[0])
 			if err != nil {
 				mylog.Printf("failed to decode base64 record: %v", err)
 				return nil
@@ -1599,10 +1596,9 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 				}
 			}
 			return messageToCreate
-		}
-	} else if imageURLs, ok := foundItems["url_record"]; ok && len(imageURLs) > 0 {
+	} else if recordURLs, ok := foundItems["url_record"]; ok && len(recordURLs) > 0 {
 		// 从URL下载语音
-		resp, err := http.Get("http://" + imageURLs[0])
+		resp, err := http.Get("http://" + recordURLs[0])
 		if err != nil {
 			mylog.Printf("Error downloading the record: %v", err)
 			return &dto.MessageToCreate{
@@ -1660,9 +1656,9 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 			Content:    "",     // 这个字段文档没有了
 			SrvSendMsg: false,
 		}
-	} else if imageURLs, ok := foundItems["url_records"]; ok && len(imageURLs) > 0 {
-		// 从URL下载语音
-		resp, err := http.Get("https://" + imageURLs[0])
+	} else if recordURLs, ok := foundItems["url_records"]; ok && len(recordURLs) > 0 {
+// 从URL下载语音
+resp, err := http.Get("https://" + recordURLs[0])
 		if err != nil {
 			mylog.Printf("Error downloading the record: %v", err)
 			return &dto.MessageToCreate{
@@ -2420,3 +2416,4 @@ func postGroupRichMediaMessageWithRetry(apiv2 openapi.OpenAPI, groupID string, r
 	}
 	return resp, err
 }
+
