@@ -31,6 +31,16 @@ _✨ 基于 [OneBot](https://github.com/howmanybots/onebot/blob/master/README.md
 </p>
 
 <p align="center">
+ <a href="https://www.star-history.com/star-history/star-history">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/badge?repo=Te-River/Gensokyo-NewQQ&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/badge?repo=Te-River/Gensokyo-NewQQ" />
+    <img alt="Star History Rank" src="https://api.star-history.com/badge?repo=Te-River/Gensokyo-NewQQ" />
+  </picture>
+ </a>
+</p>
+
+<p align="center">
   <a href="/docs/更多文档.md">文档</a>
   ·
   <a href="https://github.com/hoshinonyaruko/gensokyo/releases">下载</a>
