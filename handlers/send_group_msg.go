@@ -899,7 +899,7 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 		if !silk.IsAMRorSILK(RecordData) {
 			mt, ok := silk.CheckAudio(bytes.NewReader(RecordData))
 			if !ok {
-				mylog.Errorf("voice type error: " + mt)
+				mylog.Errorf("voice type error: %s", mt)
 				return nil
 			}
 			RecordData = silk.EncoderSilk(RecordData)
@@ -1060,7 +1060,7 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 			if !silk.IsAMRorSILK(fileRecordData) {
 				mt, ok := silk.CheckAudio(bytes.NewReader(fileRecordData))
 				if !ok {
-					mylog.Errorf("voice type error: " + mt)
+					mylog.Errorf("voice type error: %s", mt)
 					return nil
 				}
 				fileRecordData = silk.EncoderSilk(fileRecordData)
@@ -1121,7 +1121,7 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 		if !silk.IsAMRorSILK(recordData) {
 			mt, ok := silk.CheckAudio(bytes.NewReader(recordData))
 			if !ok {
-				mylog.Errorf("voice type error: " + mt)
+				mylog.Errorf("voice type error: %s", mt)
 				return nil
 			}
 			recordData = silk.EncoderSilk(recordData)
@@ -1182,7 +1182,7 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 		if !silk.IsAMRorSILK(recordData) {
 			mt, ok := silk.CheckAudio(bytes.NewReader(recordData))
 			if !ok {
-				mylog.Errorf("voice type error: " + mt)
+				mylog.Errorf("voice type error: %s", mt)
 				return nil
 			}
 			recordData = silk.EncoderSilk(recordData)
@@ -1408,7 +1408,7 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 		if !silk.IsAMRorSILK(RecordData) {
 			mt, ok := silk.CheckAudio(bytes.NewReader(RecordData))
 			if !ok {
-				mylog.Errorf("voice type error: " + mt)
+				mylog.Errorf("voice type error: %s", mt)
 				return nil
 			}
 			RecordData = silk.EncoderSilk(RecordData)
@@ -1569,7 +1569,7 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 			if !silk.IsAMRorSILK(fileRecordData) {
 				mt, ok := silk.CheckAudio(bytes.NewReader(fileRecordData))
 				if !ok {
-					mylog.Errorf("voice type error: " + mt)
+					mylog.Errorf("voice type error: %s", mt)
 					return nil
 				}
 				fileRecordData = silk.EncoderSilk(fileRecordData)
@@ -1630,7 +1630,7 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 		if !silk.IsAMRorSILK(recordData) {
 			mt, ok := silk.CheckAudio(bytes.NewReader(recordData))
 			if !ok {
-				mylog.Errorf("voice type error: " + mt)
+				mylog.Errorf("voice type error: %s", mt)
 				return nil
 			}
 			recordData = silk.EncoderSilk(recordData)
@@ -1691,7 +1691,7 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 		if !silk.IsAMRorSILK(recordData) {
 			mt, ok := silk.CheckAudio(bytes.NewReader(recordData))
 			if !ok {
-				mylog.Errorf("voice type error: " + mt)
+				mylog.Errorf("voice type error: %s", mt)
 				return nil
 			}
 			recordData = silk.EncoderSilk(recordData)

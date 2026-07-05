@@ -1,24 +1,17 @@
 <template>
   <q-page class="gsk-login-page">
-    <!-- Animated background -->
-    <div class="gsk-login-bg">
-      <div class="gsk-bg-orb gsk-bg-orb-1"></div>
-      <div class="gsk-bg-orb gsk-bg-orb-2"></div>
-      <div class="gsk-bg-orb gsk-bg-orb-3"></div>
-    </div>
-
     <div class="gsk-login-container">
       <!-- Brand -->
       <div class="gsk-login-brand">
-        <q-icon name="auto_awesome" size="40px" color="primary" />
+        <q-icon name="hub" size="36px" color="primary" />
         <div class="gsk-login-brand-text">
-          <span class="gsk-gradient-text" style="font-size: 1.5rem; font-weight: 700">Gensokyo</span>
+          <span style="font-size: 1.5rem; font-weight: 700">Gensokyo</span>
           <span class="text-muted" style="font-size: 0.85rem">管理控制台</span>
         </div>
       </div>
 
       <!-- Login Card -->
-      <q-card class="gsk-login-card gsk-glass">
+      <q-card class="gsk-login-card">
         <q-card-section class="q-pb-none">
           <div class="text-h6" style="font-weight: 600">欢迎回来</div>
           <div class="text-caption text-muted q-mt-xs">请登录以继续管理你的机器人</div>
@@ -155,53 +148,6 @@
   background: var(--gsk-surface-soft);
 }
 
-.gsk-login-bg {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
-
-.gsk-bg-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.15;
-  animation: gsk-float 8s ease-in-out infinite;
-}
-
-.gsk-bg-orb-1 {
-  width: 400px;
-  height: 400px;
-  background: #6366f1;
-  top: -100px;
-  right: -100px;
-}
-
-.gsk-bg-orb-2 {
-  width: 300px;
-  height: 300px;
-  background: #8b5cf6;
-  bottom: -50px;
-  left: -50px;
-  animation-delay: -3s;
-}
-
-.gsk-bg-orb-3 {
-  width: 200px;
-  height: 200px;
-  background: #06b6d4;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  animation-delay: -6s;
-}
-
-@keyframes gsk-float {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(30px, -30px) scale(1.1); }
-  66% { transform: translate(-20px, 20px) scale(0.9); }
-}
-
 .gsk-login-container {
   position: relative;
   z-index: 1;
@@ -226,14 +172,16 @@
 .text-muted { color: var(--gsk-text-muted); }
 
 .gsk-login-card {
-  border-radius: 16px;
   border: 1px solid var(--gsk-border);
+  border-radius: var(--gsk-radius);
+  background: var(--gsk-surface);
+  box-shadow: var(--gsk-shadow);
   overflow: hidden;
 }
 
 .gsk-login-btn {
   height: 44px;
-  border-radius: 10px;
+  border-radius: var(--gsk-radius);
   font-weight: 600;
   text-transform: none;
 }

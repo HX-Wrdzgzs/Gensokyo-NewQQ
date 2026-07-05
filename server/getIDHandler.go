@@ -45,7 +45,7 @@ func GetIDHandler(c *gin.Context) {
 		value := c.Query("value")
 		err := idmap.WriteConfig(section, subtype, value)
 		if err != nil {
-			mylog.Printf(err.Error())
+			mylog.Printf("%s", err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

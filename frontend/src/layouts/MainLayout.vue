@@ -6,7 +6,7 @@
         <q-btn flat dense round icon="menu" size="sm" @click="toggleLeftDrawer" class="q-mr-sm" />
         <q-btn icon="dashboard" to="/index" flat dense round size="sm" class="q-mr-sm" />
         <q-toolbar-title class="gsk-toolbar-title">
-          <span class="gsk-gradient-text fw-600">Gensokyo</span>
+          <span class="fw-600">Gensokyo</span>
           <span class="text-muted q-ml-xs" style="font-size: 0.85rem">控制台</span>
         </q-toolbar-title>
         <q-space />
@@ -34,7 +34,7 @@
                 <p>基于 QQ 官方 API 的 OneBot V11 标准实现</p>
                 <p class="text-muted" style="font-size: 0.85rem">
                   前端由 Quasar v{{ $q.version }} 驱动<br>
-                  采用 Vercel + Linear 设计语言
+                  参考 Airtable + Linear 的工具型界面语言
                 </p>
               </q-card-section>
               <q-separator />
@@ -59,7 +59,7 @@
       <div class="gsk-sidebar-inner">
         <!-- Logo area -->
         <div class="gsk-sidebar-header">
-          <q-icon name="auto_awesome" size="28px" color="primary" />
+          <q-icon name="hub" size="26px" color="primary" />
           <div class="gsk-sidebar-brand">
             <div class="gsk-sidebar-title">Gensokyo</div>
             <div class="gsk-sidebar-subtitle">管理控制台</div>
@@ -143,7 +143,7 @@ function toggleLeftDrawer() {
   background: var(--gsk-surface) !important;
   border-bottom: 1px solid var(--gsk-border);
   height: var(--gsk-header-height);
-  box-shadow: var(--gsk-shadow-sm);
+  box-shadow: none;
 }
 
 .gsk-toolbar {
@@ -186,10 +186,7 @@ function toggleLeftDrawer() {
 .gsk-sidebar-title {
   font-weight: 700;
   font-size: 1rem;
-  background: var(--gsk-gradient-1);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--gsk-text);
 }
 
 .gsk-sidebar-subtitle {
@@ -223,7 +220,7 @@ function toggleLeftDrawer() {
 
   &.router-link-active,
   &.router-link-exact-active {
-    background: rgba(99, 102, 241, 0.1);
+    background: color-mix(in srgb, var(--gsk-primary) 10%, transparent);
     color: var(--gsk-primary);
 
     .gsk-nav-icon :deep(.q-icon) {

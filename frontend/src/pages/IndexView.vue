@@ -6,20 +6,36 @@
         <div class="gsk-page-title">仪表盘</div>
         <div class="gsk-page-subtitle">系统运行状态概览</div>
       </div>
-      <q-chip
-        :color="$q.dark.isActive ? 'grey-8' : 'grey-3'"
-        text-color="primary"
-        icon="refresh"
-        size="sm"
-      >
-        {{ updateInterval }}ms 刷新
-      </q-chip>
+      <div class="gsk-header-actions">
+        <q-chip outline color="primary" icon="sync" size="sm">
+          {{ updateInterval }}ms
+        </q-chip>
+        <q-chip outline :color="logConnection ? 'positive' : 'negative'" :icon="logConnection ? 'link' : 'link_off'" size="sm">
+          日志{{ logConnection ? '在线' : '断开' }}
+        </q-chip>
+      </div>
+    </div>
+
+    <div class="gsk-health-strip">
+      <div class="gsk-health-item">
+        <span class="gsk-status-dot" :class="status ? 'online' : 'warning'"></span>
+        <span>状态采样</span>
+        <strong>{{ status ? '正常' : '等待中' }}</strong>
+      </div>
+      <div class="gsk-health-item">
+        <span>CPU 主进程</span>
+        <strong>{{ status?.process.cpu_percent.toFixed(1) ?? '0.0' }}%</strong>
+      </div>
+      <div class="gsk-health-item">
+        <span>主进程内存</span>
+        <strong>{{ formatBytes(status?.process.memory_used ?? 0) }}</strong>
+      </div>
     </div>
 
     <!-- Stats Grid -->
     <div class="gsk-stats-grid">
       <!-- CPU Card -->
-      <q-card class="gsk-stat-card">
+      <q-card class="gsk-stat-card gsk-card-hover">
         <q-card-section class="gsk-stat-header">
           <q-icon name="developer_board" size="22px" color="primary" />
           <span class="gsk-stat-label">CPU 占用</span>
@@ -43,7 +59,7 @@
       </q-card>
 
       <!-- Memory Card -->
-      <q-card class="gsk-stat-card">
+      <q-card class="gsk-stat-card gsk-card-hover">
         <q-card-section class="gsk-stat-header">
           <q-icon name="memory" size="22px" color="secondary" />
           <span class="gsk-stat-label">内存占用</span>
@@ -66,7 +82,7 @@
       </q-card>
 
       <!-- Disk Card -->
-      <q-card class="gsk-stat-card">
+      <q-card class="gsk-stat-card gsk-card-hover">
         <q-card-section class="gsk-stat-header">
           <q-icon name="storage" size="22px" color="warning" />
           <span class="gsk-stat-label">硬盘占用</span>
@@ -89,7 +105,7 @@
       </q-card>
 
       <!-- Process Info Card -->
-      <q-card class="gsk-stat-card">
+      <q-card class="gsk-stat-card gsk-card-hover">
         <q-card-section class="gsk-stat-header">
           <q-icon name="bolt" size="22px" color="positive" />
           <span class="gsk-stat-label">进程状态</span>
@@ -197,7 +213,7 @@ const LEGEND_NAMES = {
       position: 'bottom' as const,
       labels: { colors: 'var(--gsk-text-secondary)' },
     },
-    colors: ['#6366f1', '#8b5cf6', '#22c55e', '#06b6d4'],
+    colors: ['#1f6feb', '#7c3aed', '#16a34a', '#0f766e'],
   },
   chartSeries = Object.values(LEGEND_NAMES).map((name) => ({
     name,
@@ -284,18 +300,56 @@ watch(
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 24px;
+  gap: 16px;
 }
 
 .gsk-page-title {
   font-size: 1.5rem;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--gsk-text);
+  letter-spacing: 0;
 }
 
 .gsk-page-subtitle {
   font-size: 0.875rem;
   color: var(--gsk-text-muted);
   margin-top: 2px;
+}
+
+.gsk-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.gsk-health-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-bottom: 16px;
+  border: 1px solid var(--gsk-border);
+  border-radius: var(--gsk-radius);
+  overflow: hidden;
+  background: var(--gsk-border);
+}
+
+.gsk-health-item {
+  min-height: 54px;
+  padding: 10px 14px;
+  background: var(--gsk-surface);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gsk-text-muted);
+  font-size: 0.8rem;
+
+  strong {
+    margin-left: auto;
+    color: var(--gsk-text);
+    font-weight: 600;
+  }
 }
 
 // Stats Grid
@@ -308,8 +362,9 @@ watch(
 
 .gsk-stat-card {
   border: 1px solid var(--gsk-border);
-  border-radius: 12px;
+  border-radius: var(--gsk-radius);
   overflow: hidden;
+  box-shadow: none;
 }
 
 .gsk-stat-header {
@@ -321,7 +376,7 @@ watch(
 
 .gsk-stat-label {
   font-size: 0.8rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--gsk-text-secondary);
 }
 
@@ -331,7 +386,7 @@ watch(
 
 .gsk-stat-value {
   font-size: 2rem;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--gsk-text);
   line-height: 1.1;
   margin-bottom: 4px;
@@ -380,7 +435,8 @@ watch(
 
 .gsk-chart-card {
   border: 1px solid var(--gsk-border);
-  border-radius: 12px;
+  border-radius: var(--gsk-radius);
+  box-shadow: none;
 }
 
 .gsk-interval-slider {
@@ -389,6 +445,20 @@ watch(
 
 .gsk-logs-card {
   border: 1px solid var(--gsk-border);
-  border-radius: 12px;
+  border-radius: var(--gsk-radius);
+}
+
+@media (max-width: 720px) {
+  .gsk-page-header {
+    flex-direction: column;
+  }
+
+  .gsk-header-actions {
+    justify-content: flex-start;
+  }
+
+  .gsk-health-strip {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

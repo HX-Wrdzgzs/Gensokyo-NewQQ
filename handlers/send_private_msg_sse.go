@@ -121,10 +121,10 @@ func HandleSendPrivateMsgSSE(client callapi.Client, api openapi.OpenAPI, apiv2 o
 	if messageID == "" {
 		if config.GetStringOb11() {
 			messageID = GetMessageIDByUseridOrGroupidSP(config.GetAppIDStr(), UserID)
-			mylog.Errorf("通过GetMessageIDByUserid函数获取的message_id:" + messageID)
+			mylog.Errorf("通过GetMessageIDByUserid函数获取的message_id:%s", messageID)
 		} else {
 			messageID = GetMessageIDByUseridOrGroupid(config.GetAppIDStr(), UserID)
-			mylog.Errorf("通过GetMessageIDByUserid函数获取的message_id:" + messageID)
+			mylog.Errorf("通过GetMessageIDByUserid函数获取的message_id:%s", messageID)
 		}
 
 	}

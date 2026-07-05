@@ -125,7 +125,7 @@ func DeleteBucket(bucketName string) {
 		// 获取指定的bucket
 		bucket := tx.Bucket([]byte(bucketName))
 		if bucket == nil {
-			mylog.Printf(bucketName + "表不存在.")
+			mylog.Printf("%s表不存在.", bucketName)
 			return nil // 如果bucket不存在，直接返回nil
 		}
 
@@ -142,7 +142,7 @@ func DeleteBucket(bucketName string) {
 	if err != nil {
 		log.Fatalf("Error clearing bucket %s: %v", bucketName, err)
 	} else {
-		mylog.Printf(bucketName + "清理成功.请手动运行-compaction")
+		mylog.Printf("%s清理成功.请手动运行-compaction", bucketName)
 	}
 }
 

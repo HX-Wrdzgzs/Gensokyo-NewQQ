@@ -18,7 +18,6 @@
       <q-btn
         @click="scroll?.setScrollPercentage('vertical', 1, 300)"
         flat
-        rounded
         icon="move_down"
         size="sm"
       >
@@ -74,6 +73,10 @@ converter.use_classes = true;
 
 const emit = defineEmits(['reconnect']);
 
+function reconnect(eventName: 'reconnect', event: Event) {
+  emit(eventName, event);
+}
+
 const props = defineProps<{
     logs: ProcessLog[] | string[];
     connected?: boolean;
@@ -101,7 +104,7 @@ watch(
 
 .gsk-logs-wrapper {
   border: 1px solid var(--gsk-border);
-  border-radius: 12px;
+  border-radius: var(--gsk-radius);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -123,8 +126,8 @@ watch(
 }
 
 .gsk-logs-area {
-  background: #0d1117;
-  color: #c9d1d9;
+  background: var(--gsk-console);
+  color: var(--gsk-console-text);
 }
 
 .gsk-logs-content {

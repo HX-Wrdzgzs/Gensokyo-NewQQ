@@ -407,7 +407,7 @@ func (p *Processors) BroadcastMessageToAll(message map[string]interface{}, api o
 	}
 
 	if len(errors) > 0 {
-		return fmt.Errorf(strings.Join(errors, "; "))
+		return fmt.Errorf("%s", strings.Join(errors, "; "))
 	}
 
 	return nil
@@ -856,7 +856,7 @@ func performBindOperation(cleanedMessage string, data interface{}, Type string, 
 	// 分割指令以获取参数
 	parts := strings.Fields(cleanedMessage)
 	if len(parts) != 3 {
-		mylog.Printf("bind指令参数错误\n正确的格式" + config.GetBindPrefix() + " 当前虚拟值 新虚拟值")
+		mylog.Printf("bind指令参数错误\n正确的格式%s 当前虚拟值 新虚拟值", config.GetBindPrefix())
 		return nil
 	}
 
@@ -893,7 +893,7 @@ func performBindOperationV2(cleanedMessage string, data interface{}, Type string
 
 	// 检查参数数量
 	if len(parts) < 3 || len(parts) > 5 {
-		mylog.Printf("bind指令参数错误\n正确的格式: " + config.GetBindPrefix() + " 当前虚拟值(用户) 新虚拟值(用户) [当前虚拟值(群) 新虚拟值(群)]")
+		mylog.Printf("bind指令参数错误\n正确的格式: %s 当前虚拟值(用户) 新虚拟值(用户) [当前虚拟值(群) 新虚拟值(群)]", config.GetBindPrefix())
 		return nil
 	}
 

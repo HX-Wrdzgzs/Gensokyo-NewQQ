@@ -1,45 +1,49 @@
 // Gensokyo-NewQQ Design Tokens
 :root {
-  --gsk-primary: #6366f1;
-  --gsk-primary-hover: #818cf8;
-  --gsk-secondary: #8b5cf6;
-  --gsk-accent: #a78bfa;
+  --gsk-primary: #1f6feb;
+  --gsk-primary-hover: #388bfd;
+  --gsk-secondary: #0f766e;
+  --gsk-accent: #7c3aed;
   --gsk-surface: #ffffff;
-  --gsk-surface-soft: #f8fafc;
-  --gsk-surface-hover: #f1f5f9;
-  --gsk-border: #e2e8f0;
-  --gsk-border-strong: #cbd5e1;
-  --gsk-text: #0f172a;
-  --gsk-text-secondary: #475569;
-  --gsk-text-muted: #94a3b8;
-  --gsk-success: #22c55e;
-  --gsk-error: #ef4444;
-  --gsk-warning: #f59e0b;
-  --gsk-info: #06b6d4;
-  --gsk-gradient-1: linear-gradient(135deg, #6366f1, #8b5cf6);
-  --gsk-gradient-2: linear-gradient(135deg, #06b6d4, #6366f1);
-  --gsk-gradient-3: linear-gradient(135deg, #f59e0b, #ef4444);
+  --gsk-surface-soft: #f6f8fb;
+  --gsk-surface-hover: #eef2f7;
+  --gsk-border: #d9dee7;
+  --gsk-border-strong: #aab2c0;
+  --gsk-text: #181d26;
+  --gsk-text-secondary: #414954;
+  --gsk-text-muted: #6b7280;
+  --gsk-success: #16833d;
+  --gsk-error: #c8372d;
+  --gsk-warning: #b7791f;
+  --gsk-info: #1f6feb;
+  --gsk-console: #0f1011;
+  --gsk-console-text: #d0d6e0;
+  --gsk-gradient-1: linear-gradient(135deg, #1f6feb, #0f766e);
+  --gsk-gradient-2: linear-gradient(135deg, #0f766e, #1f6feb);
+  --gsk-gradient-3: linear-gradient(135deg, #d97706, #c8372d);
   --gsk-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --gsk-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --gsk-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --gsk-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --gsk-radius: 8px;
   --gsk-radius-sm: 6px;
-  --gsk-radius-lg: 12px;
-  --gsk-radius-xl: 16px;
+  --gsk-radius-lg: 10px;
+  --gsk-radius-xl: 12px;
   --gsk-sidebar-width: 240px;
   --gsk-header-height: 56px;
 }
 
 .body--dark {
-  --gsk-surface: #0f1015;
-  --gsk-surface-soft: #16171d;
-  --gsk-surface-hover: #1e1f26;
-  --gsk-border: #1e1f26;
-  --gsk-border-strong: #2a2b33;
-  --gsk-text: #f1f5f9;
-  --gsk-text-secondary: #94a3b8;
-  --gsk-text-muted: #64748b;
+  --gsk-surface: #111318;
+  --gsk-surface-soft: #0b0d12;
+  --gsk-surface-hover: #181b22;
+  --gsk-border: #252a33;
+  --gsk-border-strong: #343b49;
+  --gsk-text: #f7f8f8;
+  --gsk-text-secondary: #d0d6e0;
+  --gsk-text-muted: #8a8f98;
+  --gsk-console: #010102;
+  --gsk-console-text: #d0d6e0;
   --gsk-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --gsk-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4);
   --gsk-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
@@ -55,27 +59,18 @@ body {
 
 // Gradient text utility
 .gsk-gradient-text {
-  background: var(--gsk-gradient-1);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--gsk-text);
+  background: none;
+  -webkit-text-fill-color: currentColor;
 }
 
 // Card hover effect
 .gsk-card-hover {
   transition: all 0.2s ease;
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--gsk-shadow-lg);
+    border-color: var(--gsk-border-strong);
+    box-shadow: var(--gsk-shadow);
   }
-}
-
-// Glass effect
-.gsk-glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 // Status dot
@@ -85,10 +80,10 @@ body {
   height: 8px;
   border-radius: 50%;
   margin-right: 6px;
-  &.online { background-color: var(--gsk-success); box-shadow: 0 0 6px var(--gsk-success); }
+  &.online { background-color: var(--gsk-success); }
   &.offline { background-color: var(--gsk-text-muted); }
-  &.error { background-color: var(--gsk-error); box-shadow: 0 0 6px var(--gsk-error); }
-  &.warning { background-color: var(--gsk-warning); box-shadow: 0 0 6px var(--gsk-warning); }
+  &.error { background-color: var(--gsk-error); }
+  &.warning { background-color: var(--gsk-warning); }
 }
 
 // Scrollbar
