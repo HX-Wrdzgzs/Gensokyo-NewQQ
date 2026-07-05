@@ -31,7 +31,7 @@ _✨ 基于 [OneBot](https://github.com/howmanybots/onebot/blob/master/README.md
 </p>
 
 <p align="center">
- <a href="https://www.star-history.com/star-history/star-history">
+ <a href="https://www.star-history.com/Te-River/Gensokyo-NewQQ">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/badge?repo=Te-River/Gensokyo-NewQQ&theme=dark" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/badge?repo=Te-River/Gensokyo-NewQQ" />
