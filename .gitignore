@@ -1,0 +1,31 @@
+# botgo specific
+config.yml
+*.db
+*.db.lock
+*.ini
+*.bat
+
+# Go specific
+gensokyo.exe
+gsk.exe
+*.exe
+*.upx
+gensokyo
+
+gensokyo-*
+
+# Ignore channel_temp
+channel_temp/
+
+# Ignore log
+log/
+
+# ignore dist
+webui/dist/
+
+#ignore data
+data/.vscode/
+
+
+# Build output
+release/
