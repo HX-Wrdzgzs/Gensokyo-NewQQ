@@ -18,7 +18,9 @@
 
 ---
 
-## �🐛 Bug 修复
+---
+
+## 🐛 Bug 修复
 
 ### 语音/图片本地图床上传失败（内网 server_dir 场景）
 
@@ -73,12 +75,6 @@
 ## 📝 文档 & TypeScript
 
 - 补全 `SystemMemoryDetail` 接口的 `used` 字段类型声明
-
----
-## 🔧 工程化改进
-
-- `.gitignore` 修复编码错误，添加 `webui/dist` 占位文件忽略规则
-- 停止跟踪 `webui/dist` 占位文件，由 `build.ps1 Ensure-WebUIDist` 自动创建
 
 ---
 

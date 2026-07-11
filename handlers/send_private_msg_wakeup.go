@@ -37,11 +37,21 @@ func init() {
 // HandleSendPrivateMsgWakeup 处理私聊互动召回消息
 // 逻辑高度复刻 HandleSendPrivateMsg，但适配 IsWakeup 参数并移除 ID 转换逻辑
 func HandleSendPrivateMsgWakeup(client callapi.Client, api openapi.OpenAPI, apiv2 openapi.OpenAPI, message callapi.ActionMessage) (string, error) {
+	// 异步处理：立即返回响应，避免 WebSocket 客户端超时
+	go func() {
+		HandleSendPrivateMsgWakeupAsync(client, api, apiv2, message)
+	}()
+	// 立即返回，不让 WebSocket 等待
+	return "", nil
+}
+
+// HandleSendPrivateMsgWakeupAsync 实际执行唤醒消息的异步逻辑
+func HandleSendPrivateMsgWakeupAsync(client callapi.Client, api openapi.OpenAPI, apiv2 openapi.OpenAPI, message callapi.ActionMessage) {
 	// 1. 获取 UserID，支持虚拟数字 ID → 真实 OpenID 自动转换
 	userID, ok := message.Params.UserID.(string)
 	if !ok || userID == "" {
 		mylog.Printf("send_private_msg_wakeup 错误: UserID 为空")
-		return "", nil
+		return
 	}
 
 	// 如果不是 32 位 OpenID，尝试从 idmap 转换（虚拟数字 ID → 真实 OpenID）
@@ -52,7 +62,7 @@ func HandleSendPrivateMsgWakeup(client callapi.Client, api openapi.OpenAPI, apiv
 			userID = realID
 		} else {
 			mylog.Printf("send_private_msg_wakeup 错误: UserID 不是32位OpenID且无法转换: %s", userID)
-			return "", nil
+			return
 		}
 	}
 
@@ -107,7 +117,7 @@ func HandleSendPrivateMsgWakeup(client callapi.Client, api openapi.OpenAPI, apiv
 		richMediaMessage, ok := groupReply.(*dto.RichMediaMessage)
 		if !ok {
 			mylog.Printf("Error: Expected RichMediaMessage type for key")
-			return "", nil
+			return
 		}
 
 		// 上传图片 (不需要 IsWakeup，只是为了拿 FileInfo)
@@ -115,7 +125,7 @@ func HandleSendPrivateMsgWakeup(client callapi.Client, api openapi.OpenAPI, apiv
 		if err != nil {
 			mylog.Printf("上传图片失败: %v", err)
 			sendWakeupNotice(client, userID, nil, err, selfID)
-			return "", nil
+			return
 		}
 
 		// 构造 MessageToCreate
@@ -252,7 +262,7 @@ func HandleSendPrivateMsgWakeup(client callapi.Client, api openapi.OpenAPI, apiv
 		}
 	}
 
-	return `{"status": "ok", "retcode": 0}`, nil
+	return
 }
 
 // postC2CWakeupMessageWithRetry 召回消息专用重试逻辑
