@@ -37,11 +37,17 @@ func init() {
 // HandleSendPrivateMsgWakeup 处理私聊互动召回消息
 // 逻辑高度复刻 HandleSendPrivateMsg，但适配 IsWakeup 参数并移除 ID 转换逻辑
 func HandleSendPrivateMsgWakeup(client callapi.Client, api openapi.OpenAPI, apiv2 openapi.OpenAPI, message callapi.ActionMessage) (string, error) {
-	// 异步处理：立即返回响应，避免 WebSocket 客户端超时
-	go func() {
-		HandleSendPrivateMsgWakeupAsync(client, api, apiv2, message)
-	}()
-	// 立即返回，不让 WebSocket 等待
+	// 立即发送带 echo 的响应，避免 WebSocket 客户端超时
+	immediateResp := map[string]interface{}{
+		"status":   "ok",
+		"retcode":  0,
+		"data":     map[string]interface{}{},
+		"echo":     message.Echo,
+	}
+	client.SendMessage(immediateResp)
+
+	// 异步执行实际唤醒逻辑
+	go HandleSendPrivateMsgWakeupAsync(client, api, apiv2, message)
 	return "", nil
 }
 
