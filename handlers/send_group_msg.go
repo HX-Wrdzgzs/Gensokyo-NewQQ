@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -584,6 +585,10 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 						"url_images":    true,
 						"base64_record": true,
 						"base64_image":  true,
+						"local_file":    true,
+						"url_file":      true,
+						"url_files":     true,
+						"base64_file":   true,
 					}
 					// key是 for key, urls := range foundItems { 这里的key
 					if _, exists := keyMap[key]; exists {
@@ -679,8 +684,13 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 					media := dto.Media{
 						FileInfo: message_return.MediaResponse.FileInfo,
 					}
+					// 文件类型使用 RichMediaMessage 中的文件名，其他类型保持空格
+					content := richMediaMessage.Content
+					if content == "" {
+						content = " "
+					}
 					groupMessage := &dto.MessageToCreate{
-						Content: " ",
+						Content: content,
 						MsgID:   messageID,
 						EventID: eventID,
 						MsgSeq:  msgseq,
@@ -1334,6 +1344,78 @@ resp, err := http.Get("https://" + recordURLs[0])
 			Content:    "",           // 这个字段文档没有了
 			SrvSendMsg: false,
 		}
+	} else if fileURLs, ok := foundItems["local_file"]; ok && len(fileURLs) > 0 {
+		// 从本地路径读取文件
+		fileData, err := os.ReadFile(fileURLs[0])
+		if err != nil {
+			mylog.Printf("Error reading the file from path %s: %v", fileURLs[0], err)
+			return &dto.MessageToCreate{
+				Content: "错误: 文件不存在",
+				MsgID:   id,
+				EventID: eventid,
+				MsgSeq:  msgseq,
+				MsgType: 0,
+			}
+		}
+		// 提取文件名
+		fileName := filepath.Base(fileURLs[0])
+		// base64编码
+		base64Encoded := base64.StdEncoding.EncodeToString(fileData)
+		// 直接 base64 上传文件到 QQ CDN，文件名作为 content 传递
+		messageToCreate, err := images.CreateAndUploadMediaMessage(context.TODO(), base64Encoded, eventid, 4, false, fileName, groupid, id, msgseq, apiv2)
+		if err != nil {
+			mylog.Printf("Error uploading file: %v", err)
+			return &dto.MessageToCreate{
+				Content: "错误: 上传文件失败",
+				MsgID:   id,
+				EventID: eventid,
+				MsgSeq:  msgseq,
+				MsgType: 0,
+			}
+		}
+		return messageToCreate
+	} else if fileURLs, ok := foundItems["url_file"]; ok && len(fileURLs) > 0 {
+		// 从 URL 提取文件名
+		fileName := filepath.Base(fileURLs[0])
+		if fileName == "." || fileName == "/" {
+			fileName = ""
+		}
+		// 发链接文件 http
+		return &dto.RichMediaMessage{
+			EventID:    id,
+			FileType:   4,           // 4代表文件
+			URL:        "http://" + fileURLs[0],
+			Content:    fileName,
+			SrvSendMsg: false,
+		}
+	} else if fileURLs, ok := foundItems["url_files"]; ok && len(fileURLs) > 0 {
+		// 从 URL 提取文件名
+		fileName := filepath.Base(fileURLs[0])
+		if fileName == "." || fileName == "/" {
+			fileName = ""
+		}
+		// 发链接文件 https
+		return &dto.RichMediaMessage{
+			EventID:    id,
+			FileType:   4,           // 4代表文件
+			URL:        "https://" + fileURLs[0],
+			Content:    fileName,
+			SrvSendMsg: false,
+		}
+	} else if base64Files, ok := foundItems["base64_file"]; ok && len(base64Files) > 0 {
+		// base64文件数据上传到 QQ CDN
+		messageToCreate, err := images.CreateAndUploadMediaMessage(context.TODO(), base64Files[0], eventid, 4, false, "", groupid, id, msgseq, apiv2)
+		if err != nil {
+			mylog.Printf("Error uploading base64 file: %v", err)
+			return &dto.MessageToCreate{
+				Content: "错误: 上传文件失败",
+				MsgID:   id,
+				EventID: eventid,
+				MsgSeq:  msgseq,
+				MsgType: 0,
+			}
+		}
+		return messageToCreate
 	} else {
 		// 返回文本信息
 		return &dto.MessageToCreate{
@@ -1842,6 +1924,78 @@ resp, err := http.Get("https://" + recordURLs[0])
 			Content:    "",           // 这个字段文档没有了
 			SrvSendMsg: false,
 		}
+	} else if fileURLs, ok := foundItems["local_file"]; ok && len(fileURLs) > 0 {
+		// 从本地路径读取文件
+		fileData, err := os.ReadFile(fileURLs[0])
+		if err != nil {
+			mylog.Printf("Error reading the file from path %s: %v", fileURLs[0], err)
+			return &dto.MessageToCreate{
+				Content: "错误: 文件不存在",
+				MsgID:   id,
+				EventID: eventid,
+				MsgSeq:  msgseq,
+				MsgType: 0,
+			}
+		}
+		// 提取文件名
+		fileName := filepath.Base(fileURLs[0])
+		// base64编码
+		base64Encoded := base64.StdEncoding.EncodeToString(fileData)
+		// 直接 base64 上传文件到 QQ CDN，文件名作为 content 传递
+		messageToCreate, err := images.CreateAndUploadMediaMessagePrivate(context.TODO(), base64Encoded, eventid, 4, false, fileName, userid, id, msgseq, apiv2)
+		if err != nil {
+			mylog.Printf("Error uploading file: %v", err)
+			return &dto.MessageToCreate{
+				Content: "错误: 上传文件失败",
+				MsgID:   id,
+				EventID: eventid,
+				MsgSeq:  msgseq,
+				MsgType: 0,
+			}
+		}
+		return messageToCreate
+	} else if fileURLs, ok := foundItems["url_file"]; ok && len(fileURLs) > 0 {
+		// 从 URL 提取文件名
+		fileName := filepath.Base(fileURLs[0])
+		if fileName == "." || fileName == "/" {
+			fileName = ""
+		}
+		// 发链接文件 http
+		return &dto.RichMediaMessage{
+			EventID:    id,
+			FileType:   4,           // 4代表文件
+			URL:        "http://" + fileURLs[0],
+			Content:    fileName,
+			SrvSendMsg: false,
+		}
+	} else if fileURLs, ok := foundItems["url_files"]; ok && len(fileURLs) > 0 {
+		// 从 URL 提取文件名
+		fileName := filepath.Base(fileURLs[0])
+		if fileName == "." || fileName == "/" {
+			fileName = ""
+		}
+		// 发链接文件 https
+		return &dto.RichMediaMessage{
+			EventID:    id,
+			FileType:   4,           // 4代表文件
+			URL:        "https://" + fileURLs[0],
+			Content:    fileName,
+			SrvSendMsg: false,
+		}
+	} else if base64Files, ok := foundItems["base64_file"]; ok && len(base64Files) > 0 {
+		// base64文件数据上传到 QQ CDN
+		messageToCreate, err := images.CreateAndUploadMediaMessagePrivate(context.TODO(), base64Files[0], eventid, 4, false, "", userid, id, msgseq, apiv2)
+		if err != nil {
+			mylog.Printf("Error uploading base64 file: %v", err)
+			return &dto.MessageToCreate{
+				Content: "错误: 上传文件失败",
+				MsgID:   id,
+				EventID: eventid,
+				MsgSeq:  msgseq,
+				MsgType: 0,
+			}
+		}
+		return messageToCreate
 	} else {
 		// 返回文本信息
 		return &dto.MessageToCreate{

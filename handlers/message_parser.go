@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -787,6 +788,33 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 					messageText += fmt.Sprintf("[CQ:member,type=%s,group_id=%s,user_id=%s]", memberType, groupID, userID)
 				}
 
+			case "file":
+				fileContent, _ := segmentMap["data"].(map[string]interface{})["file"].(string)
+				if strings.HasPrefix(fileContent, "file://") {
+					var cleanContent string
+					if runtime.GOOS == "windows" {
+						cleanContent = strings.TrimPrefix(fileContent, "file:///")
+					} else {
+						cleanContent = strings.TrimPrefix(fileContent, "file://")
+					}
+					// 解码 URL 编码（如 %E7%A5%9E → 神）
+					if decoded, err := neturl.PathUnescape(cleanContent); err == nil {
+						cleanContent = decoded
+					}
+					foundItems["local_file"] = append(foundItems["local_file"], cleanContent)
+				} else if strings.HasPrefix(fileContent, "http://") {
+					cleanContent := strings.TrimPrefix(fileContent, "http://")
+					foundItems["url_file"] = append(foundItems["url_file"], cleanContent)
+				} else if strings.HasPrefix(fileContent, "https://") {
+					cleanContent := strings.TrimPrefix(fileContent, "https://")
+					foundItems["url_files"] = append(foundItems["url_files"], cleanContent)
+				} else if strings.HasPrefix(fileContent, "base64://") {
+					cleanContent := strings.TrimPrefix(fileContent, "base64://")
+					foundItems["base64_file"] = append(foundItems["base64_file"], cleanContent)
+				} else {
+					foundItems["unknown_file"] = append(foundItems["unknown_file"], fileContent)
+				}
+
 			default:
 				mylog.Printf("Unhandled segment type: %s", segmentType)
 			}
@@ -914,6 +942,33 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 				mylog.Printf("Error: markdown segment data is nil.")
 			}
 
+		case "file":
+			fileContent, _ := message["data"].(map[string]interface{})["file"].(string)
+			if strings.HasPrefix(fileContent, "file://") {
+				var cleanContent string
+				if runtime.GOOS == "windows" {
+					cleanContent = strings.TrimPrefix(fileContent, "file:///")
+				} else {
+					cleanContent = strings.TrimPrefix(fileContent, "file://")
+				}
+				// 解码 URL 编码（如 %E7%A5%9E → 神）
+				if decoded, err := neturl.PathUnescape(cleanContent); err == nil {
+					cleanContent = decoded
+				}
+				foundItems["local_file"] = append(foundItems["local_file"], cleanContent)
+			} else if strings.HasPrefix(fileContent, "http://") {
+				cleanContent := strings.TrimPrefix(fileContent, "http://")
+				foundItems["url_file"] = append(foundItems["url_file"], cleanContent)
+			} else if strings.HasPrefix(fileContent, "https://") {
+				cleanContent := strings.TrimPrefix(fileContent, "https://")
+				foundItems["url_files"] = append(foundItems["url_files"], cleanContent)
+			} else if strings.HasPrefix(fileContent, "base64://") {
+				cleanContent := strings.TrimPrefix(fileContent, "base64://")
+				foundItems["base64_file"] = append(foundItems["base64_file"], cleanContent)
+			} else {
+				foundItems["unknown_file"] = append(foundItems["unknown_file"], fileContent)
+			}
+
 		default:
 			mylog.Printf("Unhandled message type: %s", messageType)
 		}
@@ -964,6 +1019,15 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 		httpsUrlRecordPattern := regexp.MustCompile(`\[CQ:record,file=https://(.+?)\]`)
 		httpUrlVideoPattern := regexp.MustCompile(`\[CQ:video,file=http://(.+?)\]`)
 		httpsUrlVideoPattern := regexp.MustCompile(`\[CQ:video,file=https://(.+?)\]`)
+		var localFilePattern *regexp.Regexp
+		if runtime.GOOS == "windows" {
+			localFilePattern = regexp.MustCompile(`\[CQ:file,file=file:///([^\]]+?)\]`)
+		} else {
+			localFilePattern = regexp.MustCompile(`\[CQ:file,file=file://([^\]]+?)\]`)
+		}
+		httpUrlFilePattern := regexp.MustCompile(`\[CQ:file,file=http://(.+?)\]`)
+		httpsUrlFilePattern := regexp.MustCompile(`\[CQ:file,file=https://(.+?)\]`)
+		base64FilePattern := regexp.MustCompile(`\[CQ:file,file=base64://(.+?)\]`)
 		mdPattern := regexp.MustCompile(`\[CQ:markdown,data=base64://(.+?)\]`)
 		mdJSONPattern := regexp.MustCompile(`\[CQ:markdown,data=(\{.*\})\]`)
 		qqMusicPattern := regexp.MustCompile(`\[CQ:music,type=qq,id=(\d+)\]`)
@@ -993,6 +1057,10 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 			{"qqmusic", qqMusicPattern},
 			{"url_video", httpUrlVideoPattern},
 			{"url_videos", httpsUrlVideoPattern},
+			{"local_file", localFilePattern},
+			{"url_file", httpUrlFilePattern},
+			{"url_files", httpsUrlFilePattern},
+			{"base64_file", base64FilePattern},
 		}
 
 		for _, pattern := range patterns {

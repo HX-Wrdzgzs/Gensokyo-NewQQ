@@ -292,6 +292,10 @@ func HandleSendPrivateMsg(client callapi.Client, api openapi.OpenAPI, apiv2 open
 						"url_images":    true,
 						"base64_record": true,
 						"base64_image":  true,
+						"local_file":    true,
+						"url_file":      true,
+						"url_files":     true,
+						"base64_file":   true,
 					}
 					// key 是 for key, urls := range foundItems { 这里的 key
 					if _, exists := keyMap[key]; exists {
@@ -368,8 +372,13 @@ func HandleSendPrivateMsg(client callapi.Client, api openapi.OpenAPI, apiv2 open
 					media := dto.Media{
 						FileInfo: message_return.MediaResponse.FileInfo,
 					}
+					// 文件类型使用 RichMediaMessage 中的文件名，其他类型保持空格
+					content := richMediaMessage.Content
+					if content == "" {
+						content = " "
+					}
 					groupMessage := &dto.MessageToCreate{
-						Content: " ",
+						Content: content,
 						MsgID:   messageID,
 						EventID: eventID,
 						MsgSeq:  msgseq,
