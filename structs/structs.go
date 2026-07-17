@@ -66,6 +66,8 @@ type Settings struct {
 	GlobalServerTempQQguild bool     `yaml:"global_server_temp_qqguild"`
 	ServerTempQQguild       string   `yaml:"server_temp_qqguild"`
 	ServerTempQQguildPool   []string `yaml:"server_temp_qqguild_pool"`
+	//图床相关
+	ImageHosting ImageHostingConfig `yaml:"image_hosting"`
 	//正向ws设置
 	WsServerPath   string `yaml:"ws_server_path"`
 	EnableWsServer bool   `yaml:"enable_ws_server"`
@@ -226,6 +228,49 @@ type VisualPrefixConfig struct {
 	Prefix          string   `yaml:"prefix"`
 	WhiteList       []string `yaml:"whiteList"`
 	NoWhiteResponse string   `yaml:"No_White_Response"`
+}
+
+// ImageHostingConfig 统一图床服务配置
+// 各图床按配置顺序依次尝试，第一个成功的返回结果
+type ImageHostingConfig struct {
+	COS       ImageHostingCOS       `yaml:"cos"`
+	Bilibili  ImageHostingBilibili  `yaml:"bilibili"`
+	QQChannel ImageHostingQQChannel `yaml:"qq_channel"`
+	ChatGLM   ImageHostingSimple    `yaml:"chatglm"`
+	Ukaka     ImageHostingSimple    `yaml:"ukaka"`
+	Xingye    ImageHostingSimple    `yaml:"xingye"`
+	Nature    ImageHostingSimple    `yaml:"nature"`
+}
+
+// ImageHostingCOS 腾讯云 COS 配置
+type ImageHostingCOS struct {
+	Enabled   bool   `yaml:"enabled"`
+	SecretID  string `yaml:"secret_id"`
+	SecretKey string `yaml:"secret_key"`
+	Region    string `yaml:"region"`
+	Bucket    string `yaml:"bucket"`
+	Domain    string `yaml:"domain"`
+}
+
+// ImageHostingBilibili B站图床配置
+type ImageHostingBilibili struct {
+	Enabled   bool   `yaml:"enabled"`
+	CSRFToken string `yaml:"csrf_token"`
+	Sessdata  string `yaml:"sessdata"`
+	Bucket    string `yaml:"bucket"`
+}
+
+// ImageHostingQQChannel QQ频道图床配置
+// Token 填写完整 Authorization 值，如 "QQBot xxx.yyy"
+type ImageHostingQQChannel struct {
+	Enabled   bool   `yaml:"enabled"`
+	ChannelID string `yaml:"channel_id"`
+	Token     string `yaml:"token"`
+}
+
+// ImageHostingSimple 简单的开关配置（ChatGLM / Ukaka / 星野 / Nature）
+type ImageHostingSimple struct {
+	Enabled bool `yaml:"enabled"`
 }
 
 type InterfaceBody struct {

@@ -458,13 +458,15 @@ settings:
 
 ## 特别鸣谢
 
-- [`mnixry/nonebot-plugin-gocqhttp`](https://github.com/mnixry/nonebot-plugin-gocqhttp/): 本项目采用了mnixry编写的前端并实现了与它对应的基于qq官方api的后端api.
-- 特别鸣谢[`dk 盾`](https://www.dkdun.cn/),友情赞助服务器资源
-- 感谢[`Gensokyo`](https://github.com/Hoshinonyaruko/Gensokyo/)
+- 感谢[`mnixry/nonebot-plugin-gocqhttp`](https://github.com/mnixry/nonebot-plugin-gocqhttp/): 本项目采用了mnixry编写的前端并实现了与它对应的基于qq官方api的后端api.
+- 感谢[`Hoshinonyaruko/Gensokyo`](https://github.com/Hoshinonyaruko/Gensokyo/)
+- 感谢[`ElainaCore/ElainaBot_v2`](https://github.com/ElainaCore/ElainaBot_v2)为本项目图床方面提供了相关思路
+- 感谢[`HX-Wrdzgzs/GensokyoNewQQWeb`](https://github.com/HX-Wrdzgzs/GensokyoNewQQWeb)为本项目搭建了web ~~（虽然没什么人看就是了）~~
 
 ## 引用
 
 - [`tencent-connect/botgo`](https://github.com/tencent-connect/botgo): 本项目引用了此项目并做了一些改动
+- [`ElainaCore/ElainaBot_v2`](https://github.com/ElainaCore/ElainaBot_v2)：本项目的免费图床部分基于其相关源代码修改
 
 
 ## ⭐ Star History

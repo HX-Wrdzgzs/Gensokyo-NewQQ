@@ -182,28 +182,28 @@ func main() {
 			if err := botgo.SelectOpenAPIVersion(openapi.APIv1); err != nil {
 				log.Fatalln(err)
 			}
-			api = botgo.NewOpenAPI(token).WithTimeout(15 * time.Second)
+			api = botgo.NewOpenAPI(token).WithTimeout(120 * time.Second)
 			log.Println("创建 apiv1 成功")
 
 			// 创建 v2 版本的 OpenAPI 实例
 			if err := botgo.SelectOpenAPIVersion(openapi.APIv2); err != nil {
 				log.Fatalln(err)
 			}
-			apiV2 = botgo.NewOpenAPI(token).WithTimeout(15 * time.Second)
+			apiV2 = botgo.NewOpenAPI(token).WithTimeout(120 * time.Second)
 			log.Println("创建 apiv2 成功")
 		} else {
 			// 创建 v1 版本的 OpenAPI 实例
 			if err := botgo.SelectOpenAPIVersion(openapi.APIv1); err != nil {
 				log.Fatalln(err)
 			}
-			api = botgo.NewSandboxOpenAPI(token).WithTimeout(15 * time.Second)
+			api = botgo.NewSandboxOpenAPI(token).WithTimeout(120 * time.Second)
 			log.Println("创建 沙箱 apiv1 成功")
 
 			// 创建 v2 版本的 OpenAPI 实例
 			if err := botgo.SelectOpenAPIVersion(openapi.APIv2); err != nil {
 				log.Fatalln(err)
 			}
-			apiV2 = botgo.NewSandboxOpenAPI(token).WithTimeout(15 * time.Second)
+			apiV2 = botgo.NewSandboxOpenAPI(token).WithTimeout(120 * time.Second)
 			log.Println("创建 沙箱 apiv2 成功")
 		}
 

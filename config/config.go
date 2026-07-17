@@ -2368,6 +2368,88 @@ func GetGlobalServerTempQQguild() bool {
 	return instance.Settings.GlobalServerTempQQguild
 }
 
+// ---------- 图床配置 ----------
+
+// GetImageHostingCOS 获取 COS 图床配置
+func GetImageHostingCOS() structs.ImageHostingCOS {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return structs.ImageHostingCOS{}
+	}
+	return instance.Settings.ImageHosting.COS
+}
+
+// GetImageHostingBilibili 获取 Bilibili 图床配置
+func GetImageHostingBilibili() structs.ImageHostingBilibili {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return structs.ImageHostingBilibili{}
+	}
+	return instance.Settings.ImageHosting.Bilibili
+}
+
+// GetImageHostingQQChannel 获取 QQ频道 图床配置
+func GetImageHostingQQChannel() structs.ImageHostingQQChannel {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return structs.ImageHostingQQChannel{}
+	}
+	return instance.Settings.ImageHosting.QQChannel
+}
+
+// GetImageHostingQQChannelToken 获取 QQ频道 图床的 Authorization token
+func GetImageHostingQQChannelToken() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return ""
+	}
+	return instance.Settings.ImageHosting.QQChannel.Token
+}
+
+// GetImageHostingChatGLM 获取 ChatGLM 图床配置
+func GetImageHostingChatGLM() structs.ImageHostingSimple {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return structs.ImageHostingSimple{}
+	}
+	return instance.Settings.ImageHosting.ChatGLM
+}
+
+// GetImageHostingUkaka 获取 Ukaka 图床配置
+func GetImageHostingUkaka() structs.ImageHostingSimple {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return structs.ImageHostingSimple{}
+	}
+	return instance.Settings.ImageHosting.Ukaka
+}
+
+// GetImageHostingXingye 获取 星野 图床配置
+func GetImageHostingXingye() structs.ImageHostingSimple {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return structs.ImageHostingSimple{}
+	}
+	return instance.Settings.ImageHosting.Xingye
+}
+
+// GetImageHostingNature 获取 Nature 图床配置
+func GetImageHostingNature() structs.ImageHostingSimple {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return structs.ImageHostingSimple{}
+	}
+	return instance.Settings.ImageHosting.Nature
+}
+
 // 获取ServerTempQQguild
 func GetServerTempQQguild() string {
 	mu.RLock()

@@ -1,10 +1,13 @@
 package images
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"log"
 	"net"
@@ -12,8 +15,10 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hoshinonyaruko/gensokyo/config"
+	"github.com/hoshinonyaruko/gensokyo/imagehosting"
 	"github.com/hoshinonyaruko/gensokyo/mylog"
 	"github.com/hoshinonyaruko/gensokyo/oss"
 	"github.com/tencent-connect/botgo/dto"
@@ -95,9 +100,12 @@ func CreateAndUploadMediaMessagePrivate(ctx context.Context, base64EncodedData, 
 }
 
 // uploadMedia 上传媒体并返回FileInfo
+// 使用 300s 超时 context 避免大文件上传超时
 func uploadMedia(ctx context.Context, groupID string, richMediaMessage *dto.RichMediaMessage, apiv2 openapi.OpenAPI) (string, error) {
+	uploadCtx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
 	// 调用API来上传媒体
-	messageReturn, err := apiv2.PostGroupMessage(ctx, groupID, richMediaMessage)
+	messageReturn, err := apiv2.PostGroupMessage(uploadCtx, groupID, richMediaMessage)
 	if err != nil {
 		return "", err
 	}
@@ -105,10 +113,13 @@ func uploadMedia(ctx context.Context, groupID string, richMediaMessage *dto.Rich
 	return messageReturn.MediaResponse.FileInfo, nil
 }
 
-// uploadMedia 上传媒体并返回FileInfo
+// uploadMediaPrivate 上传媒体并返回FileInfo
+// 使用 300s 超时 context 避免大文件上传超时
 func uploadMediaPrivate(ctx context.Context, UserID string, richMediaMessage *dto.RichMediaMessage, apiv2 openapi.OpenAPI) (string, error) {
+	uploadCtx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
 	// 调用API来上传媒体
-	messageReturn, err := apiv2.PostC2CMessage(ctx, UserID, richMediaMessage)
+	messageReturn, err := apiv2.PostC2CMessage(uploadCtx, UserID, richMediaMessage)
 	if err != nil {
 		return "", err
 	}
@@ -116,10 +127,28 @@ func uploadMediaPrivate(ctx context.Context, UserID string, richMediaMessage *dt
 	return messageReturn.MediaResponse.FileInfo, nil
 }
 
-// UploadBase64ImageToServer 将base64图片通过lotus转换成url
+// UploadBase64ImageToServer 将base64图片转换成公开URL
+// 优先使用 imagehosting 统一图床链，失败后回退到 lotus/OSS 模式
 func UploadBase64ImageToServer(base64Image string, apiv2 openapi.OpenAPI) (string, int, int, error) {
+	// 1. 尝试 imagehosting 图床链
+	imageBytes, decErr := base64.StdEncoding.DecodeString(base64Image)
+	if decErr == nil && len(imageBytes) > 0 {
+		url, imgErr := imagehosting.UploadBytes(imageBytes, "image.png")
+		if imgErr == nil && url != "" {
+			// 获取图片尺寸
+			w, h := int(0), int(0)
+			if img, _, err := image.DecodeConfig(bytes.NewReader(imageBytes)); err == nil {
+				w, h = img.Width, img.Height
+			}
+			mylog.Printf("图床上传成功: %s", url)
+			return url, w, h, nil
+		}
+		mylog.Printf("图床上传失败，回退到传统模式: %v", imgErr)
+	}
+
 	var picURL string
 	var err error
+	// 2. 回退到原有逻辑
 	// 检查是否应该使用全局服务器临时QQ群的特殊上传行为
 	if config.GetGlobalServerTempQQguild() {
 		// 直接调用UploadBehaviorV3
