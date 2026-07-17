@@ -20,17 +20,26 @@
 
 ## 配置 (config.yml)
 
-```yaml
-# oss_type 选择后端，cos/bilibili/qq_channel 仅存放对应后端所需的凭证
-oss_type: 7  # 7=ChatGLM 免费图床，开箱即用
+以下仅展示 oss_type 及图床凭证相关字段在 `config.yml` 中的实际位置。更多完整配置请参考 `readme.md`。
 
-# oss_type=4/5/6 时需要填写下方对应配置；oss_type=7/8/9/10 无需配置
+```yaml
+# oss_type 选择后端（位于 settings 的"云存储/图床"区域）
+oss_type: 0  # 0=本机 1=腾讯云COS 2=百度云BOS ... 10=Nature
+
+# 腾讯云配置 — cos: 紧贴在此
+t_COS_BUCKETNAME : ""
+t_COS_SECRETID : ""
+...
 cos:                            # 腾讯云COS自签（oss_type=4）
   secret_id: ""                 # 腾讯云 API SecretId
   secret_key: ""                # 腾讯云 API SecretKey
   region: "ap-guangzhou"        # 存储桶地域
   bucket: ""                    # 存储桶名称
   domain: ""                    # 自定义域名（留空使用COS默认域名）
+
+# 阿里云配置 — bilibili/qq_channel/免费图床紧贴在此
+a_OSS_EndPoint : ""
+...
 bilibili:                       # B站图床（oss_type=5）
   csrf_token: ""                # B站bili_jct
   sessdata: ""                  # B站SESSDATA

@@ -262,6 +262,13 @@ settings:
   t_COS_SECRETKEY : ""              #用户的 SECRETKEY 请腾讯云搜索 api密钥管理 生成并填写.妥善保存 避免泄露
   t_audit : false                   #是否审核内容 请先到控制台开启
 
+  cos:                            #腾讯云COS自签（oss_type=4，需配置secret_id/secret_key）
+    secret_id: ""                 #腾讯云 API SecretId
+    secret_key: ""                #腾讯云 API SecretKey
+    region: "ap-guangzhou"        #存储桶地域
+    bucket: ""                    #存储桶名称
+    domain: ""                    #自定义域名（留空使用COS默认域名）
+
   #百度云配置
   b_BOS_BUCKETNAME : ""             #百度智能云-BOS控制台-Bucket列表-需要选择的存储桶-域名发布信息-完整官方域名-填入 形如 hellow.gz.bcebos.com
   b_BCE_AK : ""                     #百度 BCE的 AK 获取方法 https://cloud.baidu.com/doc/BOS/s/Tjwvyrw7a 
@@ -275,14 +282,6 @@ settings:
   a_OSS_AccessKeySecret : ""
   a_audit : false                   #是否审核图片 请先开通阿里云内容安全需企业认证。具体操作 请参见https://help.aliyun.com/document_detail/69806.html
 
-  #统一图床凭证（仅用于填写 oss_type 对应图床/OSS 的凭证，不可同时启用多个）
-  # oss_type=4/5/6 时需要填写下方对应配置；oss_type=7/8/9/10 无需配置
-  cos:                            #腾讯云COS自签（oss_type=4，需配置secret_id/secret_key）
-    secret_id: ""                 #腾讯云 API SecretId
-    secret_key: ""                #腾讯云 API SecretKey
-    region: "ap-guangzhou"        #存储桶地域
-    bucket: ""                    #存储桶名称
-    domain: ""                    #自定义域名（留空使用COS默认域名）
   bilibili:                       #B站图床（oss_type=5，需配置Cookie）
     csrf_token: ""                #B站bili_jct
     sessdata: ""                  #B站SESSDATA

@@ -401,32 +401,43 @@ settings:
   # 0=本机上传 1=腾讯云COS(旧t_COS_*) 2=百度云BOS 3=阿里云OSS 4=腾讯云COS自签(cos.*)
   # 5=Bilibili 6=QQ频道 7=ChatGLM 8=Ukaka 9=星野 10=Nature
   oss_type: 0                         # 请根据需求选择一个，同时只能启用一个
-  # 统一图床凭证（仅用于填写对应 oss_type 所需的凭证，不可同时启用多个）
-  # 腾讯云 COS 自签（oss_type=4，需配置 secret_id/secret_key）
-  cos:
+
+  #── 腾讯云配置 ──────────────────────────────────────
+  t_COS_BUCKETNAME : ""               # 存储桶名称
+  t_COS_SECRETID : ""                 # 用户的 SecretId
+  t_COS_SECRETKEY : ""                # 用户的 SecretKey
+  t_audit : false                     # 是否审核内容
+  cos:                                # 腾讯云COS自签（oss_type=4）
     secret_id: ""                   # 腾讯云 API SecretId
     secret_key: ""                  # 腾讯云 API SecretKey
-    region: "ap-guangzhou"          # 存储桶所在地域, 如 ap-guangzhou
-    bucket: ""                      # 存储桶名称, 如 mybucket-1250000000
-    domain: ""                      # 自定义域名, 留空使用默认域名
-  # B站图床（oss_type=5，需配置 Cookie）
-  bilibili:
-    csrf_token: ""                  # B站 Cookie 中的 bili_jct 值
-    sessdata: ""                    # B站 Cookie 中的 SESSDATA 值
-    bucket: "openplatform"          # 上传 bucket, 一般无需修改
-  # QQ频道图床（oss_type=6，需 channel_id + token）
-  qq_channel:
-    channel_id: ""                  # 用于上传图片的子频道 ID
-    token: ""                       # Authorization 值, 如 "QQBot xxx.yyy"
-  # 智谱 ChatGLM 免费图床（oss_type=7，开箱即用）
-  chatglm: {}
-  # Ukaka 免费图床（oss_type=8，开箱即用）
-  ukaka: {}
-  # 星野免费图床（oss_type=9，开箱即用）
-  xingye: {}
-  # Nature 免费图床（oss_type=10，腾讯 COS 直传，密钥内置，仅图片）
-  nature: {}
-```
+    region: "ap-guangzhou"          # 存储桶所在地域
+    bucket: ""                      # 存储桶名称
+    domain: ""                      # 自定义域名（留空使用COS默认域名）
+
+  #── 百度云配置 ──────────────────────────────────────
+  b_BOS_BUCKETNAME : ""               # 存储桶域名
+  b_BCE_AK : ""                       # BCE AK
+  b_BCE_SK : ""                       # BCE SK
+
+  #── 阿里云配置 ──────────────────────────────────────
+  a_OSS_EndPoint : ""                 # EndPoint
+  a_OSS_BucketName : ""               # 存储桶名称
+  a_OSS_AccessKeyId : ""              # AccessKeyId
+  a_OSS_AccessKeySecret : ""          # AccessKeySecret
+  a_audit : false                     # 是否审核图片
+  # 图床凭证（oss_type=5~10）
+  bilibili:                           # B站图床（oss_type=5）
+    csrf_token: ""                  # B站 bili_jct
+    sessdata: ""                    # B站 SESSDATA
+    bucket: "openplatform"
+  qq_channel:                         # QQ频道图床（oss_type=6）
+    channel_id: ""                  # 上传图片的子频道 ID
+    token: ""                       # Authorization, 如 "QQBot xxx.yyy"
+  chatglm: {}                         # 智谱免费图床（oss_type=7）
+  ukaka: {}                           # Ukaka 免费图床（oss_type=8）
+  xingye: {}                          # 星野免费图床（oss_type=9）
+  nature: {}                          # Nature 免费图床（oss_type=10）
+  ```
 
 > 详细配置指南请参阅 [docs/开始使用.md](./docs/开始使用.md) 和 [docs/idmap.md](./docs/idmap.md)
 
