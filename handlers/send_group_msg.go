@@ -454,6 +454,11 @@ func HandleSendGroupMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openap
 			var kb *keyboard.MessageKeyboard
 			if mdItems, ok := foundItems["markdown"]; ok && len(mdItems) > 0 {
 				md, kb = parseMarkdownFromMessage(mdItems[0])
+				// 将 markdown 内容中的 [CQ:at,qq=数字] 转换为 QQ @ 语法
+				if md != nil && md.Content != "" {
+					md.Content = ResolveMarkdownAtMentions(md.Content)
+					md.Content = ResolveMarkdownImages(md.Content, apiv2)
+				}
 				// 提取 messageText 中的 @ 标签（<qqbot-at-user .../>），合并到 markdown 内容
 				atRe := regexp.MustCompile(`<qqbot-at-user\s+[^>]*/>`)
 				atTag := atRe.FindString(messageText)
