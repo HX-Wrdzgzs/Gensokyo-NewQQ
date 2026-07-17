@@ -444,6 +444,9 @@ func getMissingSettingsByText(templateContent, currentConfigContent string) (map
 	templateKeys := extractKeysFromString(templateContent)
 	currentKeys := extractKeysFromString(currentConfigContent)
 
+	// 构建模板中每个 key 的父 key 映射（用于判断嵌套关系）
+	parentMap := buildParentKeyMap(templateContent)
+
 	missingSettings := make(map[string]string)
 	for key := range templateKeys {
 		if _, found := currentKeys[key]; !found {
@@ -451,7 +454,58 @@ func getMissingSettingsByText(templateContent, currentConfigContent string) (map
 		}
 	}
 
+	// 过滤：如果某个 key 的父 key 已在配置中存在，说明它属于已存在的嵌套块，不再补
+	for key := range missingSettings {
+		if parent, ok := parentMap[key]; ok {
+			if _, parentExists := currentKeys[parent]; parentExists {
+				delete(missingSettings, key)
+			}
+		}
+	}
+
 	return missingSettings, nil
+}
+
+// buildParentKeyMap 解析模板，为每个 key 找到其父 key
+// 例如 image_hosting.cos.enabled 的父 key 是 cos，cos 的父 key 是 image_hosting
+func buildParentKeyMap(templateContent string) map[string]string {
+	parentMap := make(map[string]string)
+	lines := strings.Split(templateContent, "\n")
+
+	// 用栈跟踪缩进层级: 每个元素是 (缩进长度, key名)
+	type indentKey struct {
+		indent int
+		key    string
+	}
+	var stack []indentKey
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || !strings.Contains(trimmed, ":") {
+			continue
+		}
+		// 跳过注释行
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		key := strings.TrimSpace(strings.Split(trimmed, ":")[0])
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+
+		// 出栈：移除所有缩进 >= 当前行的
+		for len(stack) > 0 && stack[len(stack)-1].indent >= indent {
+			stack = stack[:len(stack)-1]
+		}
+
+		// 记录父 key
+		if len(stack) > 0 {
+			parentMap[key] = stack[len(stack)-1].key
+		}
+
+		// 入栈
+		stack = append(stack, indentKey{indent, key})
+	}
+
+	return parentMap
 }
 
 // extractKeysFromString reads a string and extracts the keys (text before the colon).
