@@ -396,30 +396,40 @@ settings:
   status_prefix: "/gskstatus"
 
   #── 云存储 / 图床 ──────────────────────────────────
-  oss_type: 0                         # 0=本机 1=腾讯COS 2=百度 3=阿里
-  image_hosting:                      # 统一图床（按顺序尝试）
+  oss_type: 0                         # 0=本机 1=腾讯COS 2=百度BOS 3=阿里OSS
+  # 统一图床服务（按配置顺序依次尝试，第一个成功的返回URL）
+  image_hosting:
+    # 腾讯云 COS 对象存储配置
     cos:
-      enabled: false
+      enabled: false                  # 是否启用 COS 图床
       secret_id: ""                   # 腾讯云 API SecretId
-      secret_key: ""
-      region: "ap-guangzhou"
-      bucket: ""
+      secret_key: ""                  # 腾讯云 API SecretKey
+      region: "ap-guangzhou"          # 存储桶所在地域, 如 ap-guangzhou
+      bucket: ""                      # 存储桶名称, 如 mybucket-1250000000
+      domain: ""                      # 自定义域名, 留空使用默认域名
+    # B站图床配置（需要 Cookie）
     bilibili:
-      enabled: false
-      csrf_token: ""                  # B站 bili_jct
-      sessdata: ""                    # B站 SESSDATA
+      enabled: false                  # 是否启用 B站图床
+      csrf_token: ""                  # B站 Cookie 中的 bili_jct 值
+      sessdata: ""                    # B站 Cookie 中的 SESSDATA 值
+      bucket: "openplatform"          # 上传 bucket, 一般无需修改
+    # QQ频道图床配置（通过发消息获取 qpic.cn 链接）
     qq_channel:
-      enabled: false
-      channel_id: ""
-      token: ""                       # Authorization 值
+      enabled: false                  # 是否启用 QQ频道图床
+      channel_id: ""                  # 用于上传图片的子频道 ID
+      token: ""                       # Authorization 值, 如 "QQBot xxx.yyy"
+    # 智谱 ChatGLM 图床（免费, 无需配置）
     chatglm:
-      enabled: true                   # 免费，开箱即用
+      enabled: true                   # 是否启用 ChatGLM 图床
+    # Ukaka 图床（免费, 无需配置）
     ukaka:
-      enabled: true
+      enabled: true                   # 是否启用 Ukaka 图床
+    # 星野图床（免费, 无需配置）
     xingye:
-      enabled: true
+      enabled: true                   # 是否启用星野图床
+    # Nature 图床（腾讯 COS 直传, 密钥内置, 仅图片）
     nature:
-      enabled: true
+      enabled: true                   # 是否启用 Nature 图床
 ```
 
 > 详细配置指南请参阅 [docs/开始使用.md](./docs/开始使用.md) 和 [docs/idmap.md](./docs/idmap.md)
