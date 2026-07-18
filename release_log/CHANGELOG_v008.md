@@ -60,6 +60,15 @@ Gensokyo 新增 `[CQ:file]` CQ 码的完整支持：
 
 `Processor/ProcessC2CMessage.go` 中群消息事件上报新增 `is_private` 布尔字段，标识该消息是否来自群内私聊（`group_private`）场景，方便应用端区分。
 
+### 群消息事件新增 `is_full_group_message` 字段
+
+`OnebotGroupMessage` 和 `OnebotGroupMessageS` 中新增 `is_full_group_message` 布尔字段，标识消息是否来自全量（非@）群聊通道。该字段仅在增强模式（`native_ob11: false`）下出现：
+
+- `GROUP_MESSAGE_CREATE`（全量群聊）→ `true`
+- `GROUP_AT_MESSAGE_CREATE`（@机器人）→ 不出现（`false`，omitempty）
+
+与现有 `to_me` 字段互补：`to_me` 表示消息是否 @ 了机器人，`is_full_group_message` 表示消息的底层事件来源。
+
 ---
 
 ## 🔧 改进
