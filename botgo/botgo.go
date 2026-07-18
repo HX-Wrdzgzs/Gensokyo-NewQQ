@@ -2,8 +2,9 @@
 package botgo
 
 import (
-	"github.com/tencent-connect/botgo/errs"
-	"github.com/tencent-connect/botgo/log"
+  "fmt"
+  "github.com/tencent-connect/botgo/errs"
+  "github.com/tencent-connect/botgo/log"
 	"github.com/tencent-connect/botgo/openapi"
 	v1 "github.com/tencent-connect/botgo/openapi/v1"
 	v2 "github.com/tencent-connect/botgo/openapi/v2"
@@ -32,10 +33,18 @@ func SelectOpenAPIVersion(version openapi.APIVersion) error {
 	return nil
 }
 
+// redactToken 对令牌进行脱敏，只显示前 4 位
+func redactToken(s string) string {
+	if len(s) <= 4 {
+		return "****"
+	}
+	return s[:4] + "****"
+}
+
 // NewOpenAPI 创建新的 openapi 实例，会返回当前的 openapi 实现的实例
 // 如果需要使用其他版本的实现，需要在调用这个方法之前调用 SelectOpenAPIVersion 方法
 func NewOpenAPI(token *token.Token) openapi.OpenAPI {
-	log.Infof("NewOpenAPI called with token: %v\n", token)
+	log.Infof("NewOpenAPI called with token: %v\n", redactToken(fmt.Sprintf("%+v", token)))
 	return openapi.DefaultImpl.Setup(token, false)
 }
 

@@ -70,7 +70,7 @@ func wsHandler(api openapi.OpenAPI, apiV2 openapi.OpenAPI, p *Processor.Processo
 			mylog.Printf("Connection failed due to missing token. Headers: %v", c.Request.Header)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
 		} else {
-			mylog.Printf("Connection failed due to incorrect token. Headers: %v, Provided token: %s", c.Request.Header, token)
+			mylog.Printf("Connection failed due to incorrect token. Headers: %v, Provided token: %s", c.Request.Header, redactToken(token))
 			c.JSON(http.StatusForbidden, gin.H{"error": "Incorrect token"})
 		}
 		return
@@ -170,4 +170,12 @@ func (c *WebSocketServerClient) SendMessage(message map[string]interface{}) erro
 
 func (client *WebSocketServerClient) Close() error {
 	return client.Conn.Close()
+}
+
+// redactToken 对令牌进行脱敏，只显示前 4 位
+func redactToken(s string) string {
+	if len(s) <= 4 {
+		return "****"
+	}
+	return s[:4] + "****"
 }

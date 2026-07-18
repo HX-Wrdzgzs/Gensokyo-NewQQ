@@ -63,12 +63,12 @@ func (atoken *AuthTokenInfo) StartRefreshAccessToken(ctx context.Context, tokenU
 		//return err
 	}
 	atoken.setAuthToken(tokenInfo)
-	log.Info("获取到的token是: %s\n", tokenInfo.Token) // 输出获取到的token
+	  log.Info("获取到的token是: " + redactToken(tokenInfo.Token)) // 输出获取到的token（脱敏）
 
-	// 获取token的有效期（通常以秒为单位）
-	tokenTTL := tokenInfo.ExpiresIn
-	// 使用sync.Once保证仅启动一个goroutine进行定时刷新
-	atoken.once.Do(func() {
+	  // 获取token的有效期（通常以秒为单位）
+	  tokenTTL := tokenInfo.ExpiresIn
+	  // 使用sync.Once保证仅启动一个goroutine进行定时刷新
+	  atoken.once.Do(func() {
 		go func() { // 启动一个新的goroutine
 			for {
 				// 如果tokenTTL为0或负数，将其设置为15
@@ -87,7 +87,7 @@ func (atoken *AuthTokenInfo) StartRefreshAccessToken(ctx context.Context, tokenU
 				tokenInfo, err := queryAccessToken(ctx, tokenURL, appID, clientSecrent)
 				if err == nil {
 					atoken.setAuthToken(tokenInfo)
-					log.Info("获取到的token是: %s\n", tokenInfo.Token) // 输出获取到的token
+					log.Info("获取到的token是: " + redactToken(tokenInfo.Token)) // 输出获取到的token（脱敏）
 					tokenTTL = tokenInfo.ExpiresIn
 				} else {
 					log.Errorf("queryAccessToken err:%v", err)
@@ -324,3 +324,11 @@ func parseExpiresIn(expiresIn interface{}) (int64, error) {
 // 		UpTime:    time.Now(),
 // 	}, nil
 // }
+
+// redactToken 对令牌进行脱敏，只显示前 4 位
+func redactToken(s string) string {
+	if len(s) <= 4 {
+		return "****"
+	}
+	return s[:4] + "****"
+}
