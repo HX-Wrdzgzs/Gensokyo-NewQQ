@@ -32,6 +32,11 @@ import (
 	"github.com/tencent-connect/botgo/openapi"
 )
 
+// 包级 HTTP 客户端，统一设置超时（30 秒），用于所有出站 HTTP 请求
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
 func init() {
 	callapi.RegisterHandler("send_group_msg", HandleSendGroupMsg)
 	callapi.RegisterHandler("send_to_group", HandleSendGroupMsg)
@@ -1013,7 +1018,7 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 			mylog.Printf("SSRF 阻止: 目标地址为私有地址: http://%s", imageURLs[0])
 			return nil
 		}
-		resp, err := http.Get("http://" + imageURLs[0])
+		resp, err := httpClient.Get("http://" + imageURLs[0])
 			if err != nil {
 				mylog.Printf("Error downloading the image: %v", err)
 				return &dto.MessageToCreate{
@@ -1075,7 +1080,7 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 			mylog.Printf("SSRF 阻止: 目标地址为私有地址: https://%s", imageURLs[0])
 			return nil
 		}
-		resp, err := http.Get("https://" + imageURLs[0])
+		resp, err := httpClient.Get("https://" + imageURLs[0])
 			if err != nil {
 				mylog.Printf("Error downloading the image: %v", err)
 				return &dto.MessageToCreate{
@@ -1177,7 +1182,7 @@ func generateGroupMessage(id string, eventid string, foundItems map[string][]str
 		mylog.Printf("SSRF 阻止: 目标地址为私有地址: http://%s", recordURLs[0])
 			return nil
 		}
-		resp, err := http.Get("http://" + recordURLs[0])
+		resp, err := httpClient.Get("http://" + recordURLs[0])
 		if err != nil {
 			mylog.Printf("Error downloading the record: %v", err)
 			return &dto.MessageToCreate{
@@ -1241,7 +1246,7 @@ if isPrivateOrLoopback("https://" + recordURLs[0]) {
 		mylog.Printf("SSRF 阻止: 目标地址为私有地址: https://%s", recordURLs[0])
 			return nil
 		}
-		resp, err := http.Get("https://" + recordURLs[0])
+		resp, err := httpClient.Get("https://" + recordURLs[0])
 		if err != nil {
 			mylog.Printf("Error downloading the record: %v", err)
 			return &dto.MessageToCreate{
@@ -1677,7 +1682,7 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 			mylog.Printf("SSRF 阻止: 目标地址为私有地址: http://%s", imageURLs[0])
 			return nil
 		}
-		resp, err := http.Get("http://" + imageURLs[0])
+		resp, err := httpClient.Get("http://" + imageURLs[0])
 			if err != nil {
 				mylog.Printf("Error downloading the image: %v", err)
 				return &dto.MessageToCreate{
@@ -1739,7 +1744,7 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 			mylog.Printf("SSRF 阻止: 目标地址为私有地址: https://%s", imageURLs[0])
 			return nil
 		}
-		resp, err := http.Get("https://" + imageURLs[0])
+		resp, err := httpClient.Get("https://" + imageURLs[0])
 			if err != nil {
 				mylog.Printf("Error downloading the image: %v", err)
 				return &dto.MessageToCreate{
@@ -1841,7 +1846,7 @@ func generatePrivateMessage(id string, eventid string, foundItems map[string][]s
 		mylog.Printf("SSRF 阻止: 目标地址为私有地址: http://%s", recordURLs[0])
 			return nil
 		}
-		resp, err := http.Get("http://" + recordURLs[0])
+		resp, err := httpClient.Get("http://" + recordURLs[0])
 		if err != nil {
 			mylog.Printf("Error downloading the record: %v", err)
 			return &dto.MessageToCreate{
@@ -1905,7 +1910,7 @@ if isPrivateOrLoopback("https://" + recordURLs[0]) {
 		mylog.Printf("SSRF 阻止: 目标地址为私有地址: https://%s", recordURLs[0])
 			return nil
 		}
-		resp, err := http.Get("https://" + recordURLs[0])
+		resp, err := httpClient.Get("https://" + recordURLs[0])
 		if err != nil {
 			mylog.Printf("Error downloading the record: %v", err)
 			return &dto.MessageToCreate{
