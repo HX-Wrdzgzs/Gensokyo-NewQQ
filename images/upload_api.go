@@ -128,30 +128,15 @@ func uploadMediaPrivate(ctx context.Context, UserID string, richMediaMessage *dt
 }
 
 // UploadBase64ImageToServer 将base64图片转换成公开URL
-// 优先使用 imagehosting 统一图床链，失败后回退到 lotus/OSS 模式
+// 根据 oss_type 选择上传后端：0~3 走本地/云OSS，4~10 走 imagehosting 对应图床
 func UploadBase64ImageToServer(base64Image string, apiv2 openapi.OpenAPI) (string, int, int, error) {
-	// 1. 尝试 imagehosting 图床链
 	imageBytes, decErr := base64.StdEncoding.DecodeString(base64Image)
-	if decErr == nil && len(imageBytes) > 0 {
-		url, imgErr := imagehosting.UploadBytes(imageBytes, "image.png")
-		if imgErr == nil && url != "" {
-			// 获取图片尺寸
-			w, h := int(0), int(0)
-			if img, _, err := image.DecodeConfig(bytes.NewReader(imageBytes)); err == nil {
-				w, h = img.Width, img.Height
-			}
-			mylog.Printf("图床上传成功: %s", url)
-			return url, w, h, nil
-		}
-		mylog.Printf("图床上传失败，回退到传统模式: %v", imgErr)
+	if decErr != nil {
+		return "", 0, 0, fmt.Errorf("base64 解码失败: %w", decErr)
 	}
 
-	var picURL string
-	var err error
-	// 2. 回退到原有逻辑
-	// 检查是否应该使用全局服务器临时QQ群的特殊上传行为
+	// 优先处理 v3 临时频道发图（与 oss_type 独立）
 	if config.GetGlobalServerTempQQguild() {
-		// 直接调用UploadBehaviorV3
 		downloadURL, width, height, err := UploadBehaviorV3(base64Image)
 		if err != nil {
 			log.Printf("Error UploadBehaviorV3: %v", err)
@@ -159,48 +144,61 @@ func UploadBase64ImageToServer(base64Image string, apiv2 openapi.OpenAPI) (strin
 		}
 		return downloadURL, width, height, nil
 	}
+
+	var picURL string
+	var err error
 	extraPicAuditingType := config.GetOssType()
 	switch extraPicAuditingType {
-	case 0:
+	case config.OssTypeLocal:
 		picURL, err = originalUploadBehavior(base64Image)
-	case 1:
+	case config.OssTypeTencent:
 		picURL, err = oss.UploadAndAuditImage(base64Image) // 腾讯
-	case 2:
+	case config.OssTypeBaidu:
 		picURL, err = oss.UploadAndAuditImageB(base64Image) // 百度
-	case 3:
+	case config.OssTypeAliyun:
 		picURL, err = oss.UploadAndAuditImageA(base64Image) // 阿里
+	case config.OssTypeCOS, config.OssTypeBilibili, config.OssTypeQQChannel,
+		config.OssTypeChatGLM, config.OssTypeUkaka, config.OssTypeXingye, config.OssTypeNature:
+		provider := config.GetOssTypeName(extraPicAuditingType)
+		picURL, err = imagehosting.UploadProvider(provider, imageBytes, "image.png")
 	default:
-		return "", 0, 0, errors.New("invalid extraPicAuditingType")
+		return "", 0, 0, errors.New("invalid oss_type")
 	}
 	if err != nil {
 		return "", 0, 0, err
 	}
 
-	height, width, err := GetImageDimensions(picURL)
-	if err != nil {
-		mylog.Printf("获取图片宽高出错")
+	// 本地/云OSS 上传后通过 URL 获取尺寸；imagehosting 后端可直接从 bytes 获取
+	var width, height int
+	if extraPicAuditingType >= config.OssTypeCOS {
+		if img, _, err := image.DecodeConfig(bytes.NewReader(imageBytes)); err == nil {
+			width, height = img.Width, img.Height
+		}
+	} else {
+		height, width, err = GetImageDimensions(picURL)
+		if err != nil {
+			mylog.Printf("获取图片宽高出错")
+		}
 	}
 
 	return picURL, width, height, nil
 }
 
-// 将base64语音通过lotus转换成url
+// UploadBase64RecordToServer 将base64语音转换成公开URL
+// oss_type 只影响图片上传；语音仍走本地服务器或原有云 OSS（1~3）
 func UploadBase64RecordToServer(base64Record string) (string, error) {
 	extraPicAuditingType := config.GetOssType()
 
-	// 根据不同的extraPicAuditingType值来调整函数行为
 	switch extraPicAuditingType {
-	case 0:
-		// 原有的函数行为
+	case config.OssTypeTencent, config.OssTypeBaidu, config.OssTypeAliyun:
+		return oss.UploadAndAuditRecord(base64Record) // 云OSS
+	case config.OssTypeCOS, config.OssTypeBilibili, config.OssTypeQQChannel,
+		config.OssTypeChatGLM, config.OssTypeUkaka, config.OssTypeXingye, config.OssTypeNature:
+		mylog.Printf("当前 oss_type=%d 仅支持图片，语音回退到本机上传", extraPicAuditingType)
 		return originalUploadBehaviorRecord(base64Record)
-	case 1:
-		return oss.UploadAndAuditRecord(base64Record) //腾讯
-	case 2:
-		return oss.UploadAndAuditRecord(base64Record) //百度
-	case 3:
-		return oss.UploadAndAuditRecord(base64Record) //阿里
 	default:
-		return "", errors.New("invalid extraPicAuditingType")
+		// 0 或其他未知值均走本地服务器
+		return originalUploadBehaviorRecord(base64Record)
 	}
 }
 

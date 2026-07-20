@@ -28,8 +28,8 @@ func tryCOS(data []byte, filename string) (string, error) {
 	secretKey := strings.TrimSpace(cfg.SecretKey)
 	bucket := strings.ToLower(strings.TrimSpace(cfg.Bucket))
 	region := strings.ToLower(strings.TrimSpace(cfg.Region))
-	if !cfg.Enabled || secretID == "" || secretKey == "" || bucket == "" || region == "" {
-		return "", fmt.Errorf("COS 未配置或未启用")
+	if secretID == "" || secretKey == "" || bucket == "" || region == "" {
+		return "", fmt.Errorf("COS 未配置（请填写 secret_id / secret_key / region / bucket）")
 	}
 	if !cosIdentifierPattern.MatchString(bucket) || !cosIdentifierPattern.MatchString(region) {
 		return "", fmt.Errorf("COS bucket 或 region 格式无效")

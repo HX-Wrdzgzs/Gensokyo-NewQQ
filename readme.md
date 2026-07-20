@@ -85,7 +85,10 @@ Gensokyo 是一款兼容 [OneBot V11](https://github.com/botuniverse/onebot-11) 
 -  q頻 (QQ Guild) 虚拟成 q群 事件、私信虚拟成 q頻 事件
 -  WebUI 管理界面
 -  指令黑白名单、URL 自动转换
--  可自定义图片压缩/图床服务（内置 ChatGLM / Ukaka / 星野 / Nature 等免费图床）
+-  可自定义图片压缩/图床/OSS 服务（oss_type 统一选择，支持 11 种后端）
+-  `[CQ:file]` 文件上传（支持本地路径/HTTP/base64 三种方式）
+-  `send_private_msg_wakeup` C2C 互动召回消息
+-  `[CQ:active]` 主动消息标记，强制走主动推送通道
 -  支持文字、图片、语音、视频、Markdown 等多种消息类型
 -  主动信息失败自动转被动
 -  完善的重连机制
@@ -99,7 +102,7 @@ Gensokyo 是一款兼容 [OneBot V11](https://github.com/botuniverse/onebot-11) 
 - [Markdown 消息](/docs/文档-markdown消息.md) — Markdown 卡片消息说明
 - [扩展 CQ 码](/docs/cq码/扩展CQ码汇总.md) — 本 Fork 新增 CQ 码
 - [标准 CQ 码差异](/docs/cq码/标准CQ码/) — 与标准 OneBot 有差异的 CQ 码
-- [统一图床服务](/imagehosting/README.md) — 7 种图床后端
+- [图床/OSS 后端](/imagehosting/README.md) — oss_type 统一选择，11 种后端
 - [更多文档](/docs/更多文档.md) — 完整文档索引
 
 ## CQ 码与 API 支持
@@ -130,8 +133,6 @@ Gensokyo 是一款兼容 [OneBot V11](https://github.com/botuniverse/onebot-11) 
 | [CQ:node]    | [合并转发节点]              |
 | [CQ:xml]     | [XML 消息]                  |
 | [CQ:json]    | [JSON 消息]                 |
-
-todo,正在施工...
 
 #### 拓展 CQ 码及与 OneBot 标准有略微差异的 CQ 码
 
@@ -396,41 +397,47 @@ settings:
   status_prefix: "/gskstatus"
 
   #── 云存储 / 图床 ──────────────────────────────────
-  oss_type: 0                         # 0=本机 1=腾讯COS 2=百度BOS 3=阿里OSS
-  # 统一图床服务（按配置顺序依次尝试，第一个成功的返回URL）
-  image_hosting:
-    # 腾讯云 COS 对象存储配置
-    cos:
-      enabled: false                  # 是否启用 COS 图床
-      secret_id: ""                   # 腾讯云 API SecretId
-      secret_key: ""                  # 腾讯云 API SecretKey
-      region: "ap-guangzhou"          # 存储桶所在地域, 如 ap-guangzhou
-      bucket: ""                      # 存储桶名称, 如 mybucket-1250000000
-      domain: ""                      # 自定义域名, 留空使用默认域名
-    # B站图床配置（需要 Cookie）
-    bilibili:
-      enabled: false                  # 是否启用 B站图床
-      csrf_token: ""                  # B站 Cookie 中的 bili_jct 值
-      sessdata: ""                    # B站 Cookie 中的 SESSDATA 值
-      bucket: "openplatform"          # 上传 bucket, 一般无需修改
-    # QQ频道图床配置（通过发消息获取 qpic.cn 链接）
-    qq_channel:
-      enabled: false                  # 是否启用 QQ频道图床
-      channel_id: ""                  # 用于上传图片的子频道 ID
-      token: ""                       # Authorization 值, 如 "QQBot xxx.yyy"
-    # 智谱 ChatGLM 图床（免费, 无需配置）
-    chatglm:
-      enabled: true                   # 是否启用 ChatGLM 图床
-    # Ukaka 图床（免费, 无需配置）
-    ukaka:
-      enabled: true                   # 是否启用 Ukaka 图床
-    # 星野图床（免费, 无需配置）
-    xingye:
-      enabled: true                   # 是否启用星野图床
-    # Nature 图床（腾讯 COS 直传, 密钥内置, 仅图片）
-    nature:
-      enabled: true                   # 是否启用 Nature 图床
-```
+  # oss_type 仅控制图片上传路径；语音上传不受此选项影响（仍走本机或 1~3 云OSS）
+  # 0=本机上传 1=腾讯云COS(旧t_COS_*) 2=百度云BOS 3=阿里云OSS 4=腾讯云COS自签(cos.*)
+  # 5=Bilibili 6=QQ频道 7=ChatGLM 8=Ukaka 9=星野 10=Nature
+  oss_type: 0                         # 请根据需求选择一个，同时只能启用一个
+
+  #── 腾讯云配置 ──────────────────────────────────────
+  t_COS_BUCKETNAME : ""               # 存储桶名称
+  t_COS_SECRETID : ""                 # 用户的 SecretId
+  t_COS_SECRETKEY : ""                # 用户的 SecretKey
+  t_audit : false                     # 是否审核内容
+  cos:                                # 腾讯云COS自签（oss_type=4）
+    secret_id: ""                   # 腾讯云 API SecretId
+    secret_key: ""                  # 腾讯云 API SecretKey
+    region: "ap-guangzhou"          # 存储桶所在地域
+    bucket: ""                      # 存储桶名称
+    domain: ""                      # 自定义域名（留空使用COS默认域名）
+
+  #── 百度云配置 ──────────────────────────────────────
+  b_BOS_BUCKETNAME : ""               # 存储桶域名
+  b_BCE_AK : ""                       # BCE AK
+  b_BCE_SK : ""                       # BCE SK
+
+  #── 阿里云配置 ──────────────────────────────────────
+  a_OSS_EndPoint : ""                 # EndPoint
+  a_OSS_BucketName : ""               # 存储桶名称
+  a_OSS_AccessKeyId : ""              # AccessKeyId
+  a_OSS_AccessKeySecret : ""          # AccessKeySecret
+  a_audit : false                     # 是否审核图片
+  # 图床凭证（oss_type=5~10）
+  bilibili:                           # B站图床（oss_type=5）
+    csrf_token: ""                  # B站 bili_jct
+    sessdata: ""                    # B站 SESSDATA
+    bucket: "openplatform"
+  qq_channel:                         # QQ频道图床（oss_type=6）
+    channel_id: ""                  # 上传图片的子频道 ID
+    token: ""                       # Authorization, 如 "QQBot xxx.yyy"
+  chatglm: {}                         # 智谱免费图床（oss_type=7）
+  ukaka: {}                           # Ukaka 免费图床（oss_type=8）
+  xingye: {}                          # 星野免费图床（oss_type=9）
+  nature: {}                          # Nature 免费图床（oss_type=10）
+  ```
 
 > 详细配置指南请参阅 [docs/开始使用.md](./docs/开始使用.md) 和 [docs/idmap.md](./docs/idmap.md)
 

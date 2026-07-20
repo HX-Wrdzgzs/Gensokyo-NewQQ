@@ -1,13 +1,105 @@
 package server
 
 import (
-	"net/http"
-	"strconv"
+  "crypto/hmac"
+  "crypto/sha256"
+  "encoding/hex"
+  "net/http"
+  "sort"
+  "strconv"
+  "strings"
+  "time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/hoshinonyaruko/gensokyo/idmap"
-	"github.com/hoshinonyaruko/gensokyo/mylog"
+  "github.com/gin-gonic/gin"
+  "github.com/hoshinonyaruko/gensokyo/config"
+  "github.com/hoshinonyaruko/gensokyo/idmap"
+  "github.com/hoshinonyaruko/gensokyo/mylog"
 )
+
+// IDMapAuthMiddleware 为 /getid 端点提供认证保护
+// 使用 HMAC-SHA256(password, path + "?" + sortedQueryParams + "&timestamp=" + timestamp) 进行认证
+// 服务端校验时间窗口为 ±5 分钟，防止重放攻击
+func IDMapAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		password := config.GetLotusPassword()
+		if password != "" {
+			// 有 Lotus password 时，使用 HMAC-SHA256 token 认证
+			token := c.Query("token")
+			if token == "" {
+				token = c.GetHeader("X-Token")
+			}
+			if token == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
+				c.Abort()
+				return
+			}
+
+			// 从 query 中获取时间戳并校验时间窗口
+			timestampStr := c.Query("timestamp")
+			if timestampStr == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "missing timestamp"})
+				c.Abort()
+				return
+			}
+			timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid timestamp"})
+				c.Abort()
+				return
+			}
+			now := time.Now().Unix()
+			if now-timestamp > 300 || timestamp-now > 300 {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "timestamp expired"})
+				c.Abort()
+				return
+			}
+
+			// 重建签名字符串：path + "?" + sorted query params (不含 token 和 timestamp) + "&timestamp=" + timestampStr
+			queryParams := c.Request.URL.Query()
+			// 移除 token 和 timestamp 参数，它们不参与签名
+			delete(queryParams, "token")
+			delete(queryParams, "timestamp")
+
+			// 对剩余参数按键排序，保证签名一致性
+			paramKeys := make([]string, 0, len(queryParams))
+			for k := range queryParams {
+				paramKeys = append(paramKeys, k)
+			}
+			sort.Strings(paramKeys)
+
+			var paramParts []string
+			for _, k := range paramKeys {
+				for _, v := range queryParams[k] {
+					paramParts = append(paramParts, k+"="+v)
+				}
+			}
+
+			signPayload := c.Request.URL.Path
+			if len(paramParts) > 0 {
+				signPayload += "?" + strings.Join(paramParts, "&")
+			}
+			signPayload += "&timestamp=" + timestampStr
+
+			mac := hmac.New(sha256.New, []byte(password))
+			mac.Write([]byte(signPayload))
+			expected := hex.EncodeToString(mac.Sum(nil))
+			if token != expected {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+				c.Abort()
+				return
+			}
+		} else {
+			// 无密码时，仅允许本地回环地址访问
+			remoteIP := c.ClientIP()
+			if remoteIP != "127.0.0.1" && remoteIP != "::1" && remoteIP != "localhost" {
+				c.JSON(http.StatusForbidden, gin.H{"error": "仅允许本地访问"})
+				c.Abort()
+				return
+			}
+		}
+		c.Next()
+	}
+}
 
 func GetIDHandler(c *gin.Context) {
 	idOrRow := c.Query("id")

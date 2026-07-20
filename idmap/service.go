@@ -1,23 +1,26 @@
 package idmap
 
 import (
-	"bytes"
-	"context"
-	"crypto/md5"
-	"encoding/binary"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"net/url"
-	"os"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
+  "bytes"
+  "context"
+  "crypto/hmac"
+  "crypto/md5"
+  "crypto/sha256"
+  "encoding/binary"
+  "encoding/hex"
+  "encoding/json"
+  "errors"
+  "fmt"
+  "io"
+  "log"
+  "net/http"
+  "net/url"
+  "os"
+  "sort"
+  "strconv"
+  "strings"
+  "sync"
+  "time"
 
 	"github.com/hoshinonyaruko/gensokyo/config"
 	"github.com/hoshinonyaruko/gensokyo/mylog"
@@ -31,11 +34,62 @@ var (
 )
 
 var (
-	// 用于存储临时指令的全局变量
-	TemporaryCommands []string
-	// 用于保证线程安全的互斥锁
-	MutexT sync.Mutex
-)
+  // 用于存储临时指令的全局变量
+  TemporaryCommands []string
+  // 用于保证线程安全的互斥锁
+  MutexT sync.Mutex
+ )
+
+// buildGetIDURL 构建带 HMAC 认证和 timestamp 的 /getid URL
+// 当 lotus_password 配置为空时，不添加 token 和 timestamp 参数（兼容旧行为）
+func buildGetIDURL(baseURL string, params map[string]string) string {
+ password := config.GetLotusPassword()
+ if password == "" {
+  // 无密码时，直接返回 baseURL + 参数
+  values := url.Values{}
+  for k, v := range params {
+   values.Add(k, v)
+  }
+  return baseURL + "?" + values.Encode()
+ }
+
+ // 构建 query 参数，包含 timestamp
+ values := url.Values{}
+ for k, v := range params {
+  values.Add(k, v)
+ }
+ timestamp := time.Now().Unix()
+ values.Add("timestamp", strconv.FormatInt(timestamp, 10))
+
+ // 计算 HMAC-SHA256 签名
+ // 签名字符串：path + "?" + sorted params (不含 token) + "&timestamp=" + timestamp
+ paramKeys := make([]string, 0, len(values))
+ for k := range values {
+  paramKeys = append(paramKeys, k)
+ }
+ sort.Strings(paramKeys)
+
+ var paramParts []string
+ for _, k := range paramKeys {
+  for _, v := range values[k] {
+   paramParts = append(paramParts, k+"="+v)
+  }
+ }
+
+ signPayload := "/getid"
+ if len(paramParts) > 0 {
+  signPayload += "?" + strings.Join(paramParts, "&")
+ }
+
+ mac := hmac.New(sha256.New, []byte(password))
+ mac.Write([]byte(signPayload))
+ token := hex.EncodeToString(mac.Sum(nil))
+ values.Add("token", token)
+
+ u, _ := url.Parse(baseURL)
+ u.RawQuery = values.Encode()
+ return u.String()
+}
 
 // usernameCacheItem 存储用户名及其存入时间
 type usernameCacheItem struct {
@@ -216,6 +270,9 @@ func CompactionIdmap() {
 
 // Compaction 创建一个新的数据库文件并复制现有的数据到这个新文件中
 func Compaction(sourceDBPath, targetDBPath string) error {
+	if db == nil {
+		return fmt.Errorf("旧数据库不存在: %s", DBName)
+	}
 	// 创建目标数据库文件
 	targetDB, err := bbolt.Open(targetDBPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
@@ -442,6 +499,9 @@ func StoreID(id string) (int64, error) {
 
 // 根据a储存b
 func StoreCache(id string) (int64, error) {
+	if db == nil {
+		return 0, fmt.Errorf("旧数据库不存在: %s", DBName)
+	}
 	var newRow int64
 	key := uinKey(id)
 	revPrefix := uinRowKey("")
@@ -554,6 +614,9 @@ func SimplifiedStoreIDv2(id string) (int64, error) {
 
 // 群号 然后 用户号
 func StoreIDPro(id string, subid string) (int64, int64, error) {
+	if db == nil {
+		return 0, 0, fmt.Errorf("旧数据库不存在: %s", DBName)
+	}
 	var newRowID, newSubRowID int64
 	var err error
 
@@ -823,6 +886,9 @@ func RetrieveRowByID(rowid string) (string, error) {
 
 // 根据b得到a
 func RetrieveRowByCache(rowid string) (string, error) {
+	if db == nil {
+		return "", fmt.Errorf("旧数据库不存在: %s", DBName)
+	}
 	var id string
 	err := db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(CacheBucketName))
@@ -908,6 +974,9 @@ func RetrieveRowByIDv2Pro(newRowID string, newSubRowID string) (string, string, 
 
 // 群号 还有用户号
 func RetrieveRowByIDPro(newRowID, newSubRowID string) (string, string, error) {
+	if db == nil {
+		return "", "", fmt.Errorf("旧数据库不存在: %s", DBName)
+	}
 	var id, subid string
 
 	err := db.View(func(tx *bbolt.Tx) error {
@@ -1762,6 +1831,9 @@ func RetrieveVirtualValuev2Pro(realValue string, realValueSub string) (string, s
 
 // 根据2个真实值 获取2个虚拟值 群号 然后 用户号
 func RetrieveVirtualValuePro(realValue string, realValueSub string) (string, string, error) {
+	if db == nil {
+		return "", "", fmt.Errorf("旧数据库不存在: %s", DBName)
+	}
 	var newRowID, newSubRowID string
 
 	err := db.View(func(tx *bbolt.Tx) error {
@@ -1897,6 +1969,9 @@ func RetrieveRealValuesv2Pro(virtualValue int64, virtualValueSub int64) (string,
 
 // UpdateVirtualValuePro 更新一对旧虚拟值到新虚拟值的映射 旧群号 新群号 旧用户 新用户
 func UpdateVirtualValuePro(oldVirtualValue1, newVirtualValue1, oldVirtualValue2, newVirtualValue2 int64) error {
+	if db == nil {
+		return fmt.Errorf("旧数据库不存在: %s", DBName)
+	}
 	return db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(BucketName))
 		// 构造旧和新的复合键
@@ -2010,6 +2085,9 @@ func FindKeysBySubAndType(sub string, typeSuffix string) ([]string, error) {
 
 // 取相同前缀下的所有key的:后边 比如取群成员列表
 func FindSubKeysById(id string) ([]string, error) {
+	if db == nil {
+		return nil, fmt.Errorf("旧数据库不存在: %s", DBName)
+	}
 	var subKeys []string
 
 	err := db.View(func(tx *bbolt.Tx) error {
@@ -2101,6 +2179,9 @@ func FindSubKeysByIdPro(id string) ([]string, error) {
 
 // 场景: xxx:yyy zzz:bbb  zzz:bbb xxx:yyy 把xxx(id)替换为newID 比如更换群号(会卡住)
 func UpdateKeysWithNewID(id, newID string) error {
+	if db == nil {
+		return fmt.Errorf("旧数据库不存在: %s", DBName)
+	}
 	return db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(BucketName))
 		if b == nil {

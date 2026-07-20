@@ -42,6 +42,90 @@ var AppID string
 var selfAtMu sync.RWMutex
 var selfAtIDs = make(map[string]struct{})
 
+// ---------- 包级正则表达式（避免重复编译） ----------
+
+var (
+	httpUrlImagePattern  = regexp.MustCompile(`\[CQ:image,file=http://(.+?)\]`)
+	httpsUrlImagePattern = regexp.MustCompile(`\[CQ:image,file=https://(.+?)\]`)
+	base64ImagePattern   = regexp.MustCompile(`\[CQ:image,file=base64://(.+?)\]`)
+	base64RecordPattern  = regexp.MustCompile(`\[CQ:record,file=base64://(.+?)\]`)
+	httpUrlRecordPattern = regexp.MustCompile(`\[CQ:record,file=http://(.+?)\]`)
+	httpsUrlRecordPattern = regexp.MustCompile(`\[CQ:record,file=https://(.+?)\]`)
+	httpUrlVideoPattern  = regexp.MustCompile(`\[CQ:video,file=http://(.+?)\]`)
+	  httpsUrlVideoPattern = regexp.MustCompile(`\[CQ:video,file=https://(.+?)\]`)
+	  base64VideoPattern   = regexp.MustCompile(`\[CQ:video,file=base64://(.+?)\]`)
+	  mdPattern            = regexp.MustCompile(`\[CQ:markdown,data=base64://(.+?)\]`)
+	mdJSONPattern        = regexp.MustCompile(`\[CQ:markdown,data=(\{.*\})\]`)
+	qqMusicPattern       = regexp.MustCompile(`\[CQ:music,type=qq,id=(\d+)\]`)
+	replyRe              = regexp.MustCompile(`\[CQ:reply,id=(\d+)\]`)
+	localImagePattern    *regexp.Regexp
+	localRecordPattern    *regexp.Regexp
+	localVideoPattern    *regexp.Regexp
+	compilePatternsOnce  sync.Once
+)
+
+// initPlatformPatterns 初始化平台相关的正则表达式（Windows vs Unix 路径前缀差异）
+func initPlatformPatterns() {
+  if runtime.GOOS == "windows" {
+   localImagePattern = regexp.MustCompile(`\[CQ:image,file=file:///([^\]]+?)\]`)
+   localRecordPattern = regexp.MustCompile(`\[CQ:record,file=file:///([^\]]+?)\]`)
+   localVideoPattern = regexp.MustCompile(`\[CQ:video,file=file:///([^\]]+?)\]`)
+  } else {
+   localImagePattern = regexp.MustCompile(`\[CQ:image,file=file://([^\]]+?)\]`)
+   localRecordPattern = regexp.MustCompile(`\[CQ:record,file=file://([^\]]+?)\]`)
+   localVideoPattern = regexp.MustCompile(`\[CQ:video,file=file://([^\]]+?)\]`)
+  }
+ }
+
+// ---------- 安全工具函数 ----------
+
+// safeLocalPath 校验并安全化本地文件路径，防止路径穿越
+// baseDir 是允许访问的基础目录，返回的路径必须在 baseDir 内
+func safeLocalPath(filePath string, baseDir string) (string, error) {
+	// URL 解码（如 %E7%A5%9E → 神）
+	decoded, err := neturl.PathUnescape(filePath)
+	if err != nil {
+		return "", fmt.Errorf("路径解码失败: %w", err)
+	}
+	// 清理路径（移除 . 和 .. 等）
+	clean := filepath.Clean(decoded)
+	// 明确拒绝包含 .. 的路径
+	if strings.Contains(clean, "..") {
+		return "", fmt.Errorf("路径包含非法字符: ..")
+	}
+	// 转为绝对路径（防止相对路径绕过）
+	abs, err := filepath.Abs(clean)
+	if err != nil {
+		return "", fmt.Errorf("路径解析失败: %w", err)
+	}
+	// 获取基础目录的绝对路径
+	baseAbs, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", fmt.Errorf("基础目录解析失败: %w", err)
+	}
+	// 检查路径是否在基础目录内
+	if !strings.HasPrefix(abs, baseAbs) {
+		return "", fmt.Errorf("路径 %s 不在允许的基础目录 %s 内", abs, baseAbs)
+	}
+	return abs, nil
+}
+
+// trimFilePrefix 剥离 file:// 协议前缀（区分 Windows 的 file:/// 和 Unix 的 file://）
+// 后续的 URL 解码和路径安全校验统一交给 safeLocalPath 完成
+func trimFilePrefix(fileContent string) string {
+	if runtime.GOOS == "windows" {
+		return strings.TrimPrefix(fileContent, "file:///")
+	}
+	return strings.TrimPrefix(fileContent, "file://")
+}
+
+// resolveLocalMedia 解析 file:// 本地路径，返回安全化的绝对路径
+// 失败时返回 (原路径, error) 供调用方决定是否记录或跳过
+func resolveLocalMedia(fileContent string) (string, error) {
+	cleanContent := trimFilePrefix(fileContent)
+	return safeLocalPath(cleanContent, ".")
+}
+
 // RememberSelfAtID 记录 GROUP_MESSAGE_CREATE mentions 中标记为 is_you 的 OpenID。
 func RememberSelfAtID(id string) {
 	if id == "" {
@@ -598,11 +682,8 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 	switch message := paramsMessage.Message.(type) {
 	case string:
 		mylog.Printf("params.message is a string\n")
-		messageText = message
-		// 解析 [CQ:active,type=xxx,sub_type=yyy]
-		messageText = ProcessCQActive(messageText, foundItems)
-		messageText = ProcessCQFile(messageText, foundItems)
-		// 直接应用替换规则
+		   messageText = message
+		   // 直接应用替换规则
 		if config.GetEnableChangeWord() {
 			messageText = acnode.CheckWordOUT(messageText)
 		}
@@ -657,7 +738,13 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 					} else {
 						cleanContent = strings.TrimPrefix(fileContent, "file://")
 					}
-					foundItems["local_image"] = append(foundItems["local_image"], cleanContent)
+					// 安全校验：防止路径穿越
+					safePath, err := safeLocalPath(cleanContent, ".")
+					if err != nil {
+						mylog.Printf("安全校验失败，跳过本地图片: %v", err)
+						break
+					}
+					foundItems["local_image"] = append(foundItems["local_image"], safePath)
 				} else {
 					// 默认情况，直接将内容存储到 foundItems 中
 					foundItems["unknown_image"] = append(foundItems["unknown_image"], fileContent)
@@ -686,7 +773,13 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 					} else {
 						cleanContent = strings.TrimPrefix(fileContent, "file://")
 					}
-					foundItems["local_record"] = append(foundItems["local_record"], cleanContent)
+					// 安全校验：防止路径穿越
+					safePath, err := safeLocalPath(cleanContent, ".")
+					if err != nil {
+						mylog.Printf("安全校验失败，跳过本地语音: %v", err)
+						break
+					}
+					foundItems["local_record"] = append(foundItems["local_record"], safePath)
 				} else {
 					// 无法识别的类型，直接存储
 					foundItems["unknown_record"] = append(foundItems["unknown_record"], fileContent)
@@ -701,7 +794,6 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 				if replyID != "" {
 					foundItems["reply_msg_id"] = append(foundItems["reply_msg_id"], replyID)
 				}
-				messageText += "[CQ:reply,id=" + replyID + "]"
 
 			case "active":
 				dataMap, ok := segmentMap["data"].(map[string]interface{})
@@ -723,7 +815,20 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 				} else {
 					avatarCQCode, _ = GetAvatarCQCode(paramsMessage.GroupID.(string), qqNumber)
 				}
-				messageText += avatarCQCode
+				// 从 [CQ:image,file=URL] 中提取 URL 存入 foundItems
+				if avatarCQCode != "" {
+					re := regexp.MustCompile(`\[CQ:image,file=(.+?)\]`)
+					if m := re.FindStringSubmatch(avatarCQCode); len(m) > 1 {
+						url := m[1]
+						if strings.HasPrefix(url, "https://") {
+							foundItems["url_images"] = append(foundItems["url_images"], strings.TrimPrefix(url, "https://"))
+						} else if strings.HasPrefix(url, "http://") {
+							foundItems["url_image"] = append(foundItems["url_image"], strings.TrimPrefix(url, "http://"))
+						} else {
+							foundItems["unknown_image"] = append(foundItems["unknown_image"], url)
+						}
+					}
+				}
 
 			case "markdown":
 				mdContent, ok := segmentMap["data"].(map[string]interface{})["data"]
@@ -794,17 +899,13 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 				fileContent, _ := dataMap["file"].(string)
 				fileName, _ := dataMap["file_name"].(string)
 				if strings.HasPrefix(fileContent, "file://") {
-					var cleanContent string
-					if runtime.GOOS == "windows" {
-						cleanContent = strings.TrimPrefix(fileContent, "file:///")
-					} else {
-						cleanContent = strings.TrimPrefix(fileContent, "file://")
+					// 解码与安全校验统一由 resolveLocalMedia 完成
+					safePath, err := resolveLocalMedia(fileContent)
+					if err != nil {
+						mylog.Printf("安全校验失败，跳过本地文件: %v", err)
+						break
 					}
-					// 解码 URL 编码（如 %E7%A5%9E → 神）
-					if decoded, err := neturl.PathUnescape(cleanContent); err == nil {
-						cleanContent = decoded
-					}
-					foundItems["local_file"] = append(foundItems["local_file"], cleanContent)
+					foundItems["local_file"] = append(foundItems["local_file"], safePath)
 				} else if strings.HasPrefix(fileContent, "http://") {
 					cleanContent := strings.TrimPrefix(fileContent, "http://")
 					foundItems["url_file"] = append(foundItems["url_file"], cleanContent)
@@ -821,14 +922,41 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 					foundItems["file_name"] = append(foundItems["file_name"], fileName)
 				}
 
-			default:
-				mylog.Printf("Unhandled segment type: %s", segmentType)
-			}
+			case "video":
+				fileContent, _ := segmentMap["data"].(map[string]interface{})["file"].(string)
+				if strings.HasPrefix(fileContent, "http://") {
+					cleanContent := strings.TrimPrefix(fileContent, "http://")
+					foundItems["url_video"] = append(foundItems["url_video"], cleanContent)
+				} else if strings.HasPrefix(fileContent, "https://") {
+					cleanContent := strings.TrimPrefix(fileContent, "https://")
+					foundItems["url_videos"] = append(foundItems["url_videos"], cleanContent)
+				} else if strings.HasPrefix(fileContent, "base64://") {
+					cleanContent := strings.TrimPrefix(fileContent, "base64://")
+					foundItems["base64_video"] = append(foundItems["base64_video"], cleanContent)
+				} else if strings.HasPrefix(fileContent, "file://") {
+					safePath, err := resolveLocalMedia(fileContent)
+					if err != nil {
+						mylog.Printf("安全校验失败，跳过本地视频: %v", err)
+						break
+					}
+					foundItems["local_video"] = append(foundItems["local_video"], safePath)
+				}
 
-			messageText += segmentContent
+			    case "music":
+			     musicType, _ := segmentMap["data"].(map[string]interface{})["type"].(string)
+			     musicID, _ := segmentMap["data"].(map[string]interface{})["id"].(string)
+			     if musicType == "qq" && musicID != "" {
+			      foundItems["qqmusic"] = append(foundItems["qqmusic"], musicID)
+			     }
 
-		}
-	case map[string]interface{}:
+			    default:
+			     mylog.Printf("Unhandled segment type: %s", segmentType)
+			    }
+
+			    messageText += segmentContent
+
+			   }
+			  case map[string]interface{}:
 		mylog.Printf("params.message is a map (segment_type_trss)\n")
 		messageType, _ := message["type"].(string)
 
@@ -863,7 +991,13 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 				} else {
 					cleanContent = strings.TrimPrefix(fileContent, "file://")
 				}
-				foundItems["local_image"] = append(foundItems["local_image"], cleanContent)
+				// 安全校验：防止路径穿越
+				safePath, err := safeLocalPath(cleanContent, ".")
+				if err != nil {
+					mylog.Printf("安全校验失败，跳过本地图片: %v", err)
+					break
+				}
+				foundItems["local_image"] = append(foundItems["local_image"], safePath)
 			} else {
 				// 默认情况，直接将内容存储到 foundItems 中
 				foundItems["unknown_image"] = append(foundItems["unknown_image"], fileContent)
@@ -892,25 +1026,50 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 				} else {
 					cleanContent = strings.TrimPrefix(fileContent, "file://")
 				}
-				foundItems["local_record"] = append(foundItems["local_record"], cleanContent)
+				// 安全校验：防止路径穿越
+				safePath, err := safeLocalPath(cleanContent, ".")
+				if err != nil {
+					mylog.Printf("安全校验失败，跳过本地语音: %v", err)
+					break
+				}
+				foundItems["local_record"] = append(foundItems["local_record"], safePath)
 			} else {
 				// 无法识别的类型，直接存储
 				foundItems["unknown_record"] = append(foundItems["unknown_record"], fileContent)
 			}
 
 		case "at":
-			qqNumber, _ := message["data"].(map[string]interface{})["qq"].(string)
-			messageText += "[CQ:at,qq=" + qqNumber + "]"
+		    qqNumber, _ := message["data"].(map[string]interface{})["qq"].(string)
+		    messageText += "[CQ:at,qq=" + qqNumber + "]"
 
-		case "avatar":
-			qqNumber, _ := message["data"].(map[string]interface{})["qq"].(string)
-			var avatarCQCode string
-			if paramsMessage.GroupID == nil {
-				avatarCQCode, _ = GetAvatarCQCodeNoGroupID(qqNumber)
-			} else {
-				avatarCQCode, _ = GetAvatarCQCode(paramsMessage.GroupID.(string), qqNumber)
-			}
-			messageText += avatarCQCode
+		   case "reply":
+		    replyID, _ := message["data"].(map[string]interface{})["id"].(string)
+		    if replyID != "" {
+		     foundItems["reply_msg_id"] = append(foundItems["reply_msg_id"], replyID)
+		    }
+
+		   case "avatar":
+		    qqNumber, _ := message["data"].(map[string]interface{})["qq"].(string)
+		    var avatarCQCode string
+		    if paramsMessage.GroupID == nil {
+		     avatarCQCode, _ = GetAvatarCQCodeNoGroupID(qqNumber)
+		    } else {
+		     avatarCQCode, _ = GetAvatarCQCode(paramsMessage.GroupID.(string), qqNumber)
+		    }
+		    // 从 [CQ:image,file=URL] 中提取 URL 存入 foundItems
+		    if avatarCQCode != "" {
+		     re := regexp.MustCompile(`\[CQ:image,file=(.+?)\]`)
+		     if m := re.FindStringSubmatch(avatarCQCode); len(m) > 1 {
+		      url := m[1]
+		      if strings.HasPrefix(url, "https://") {
+		       foundItems["url_images"] = append(foundItems["url_images"], strings.TrimPrefix(url, "https://"))
+		      } else if strings.HasPrefix(url, "http://") {
+		       foundItems["url_image"] = append(foundItems["url_image"], strings.TrimPrefix(url, "http://"))
+		      } else {
+		       foundItems["unknown_image"] = append(foundItems["unknown_image"], url)
+		      }
+		     }
+		    }
 
 		case "markdown":
 			mdContent, ok := message["data"].(map[string]interface{})["data"]
@@ -953,17 +1112,13 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 			fileContent, _ := dataMap["file"].(string)
 			fileName, _ := dataMap["file_name"].(string)
 			if strings.HasPrefix(fileContent, "file://") {
-				var cleanContent string
-				if runtime.GOOS == "windows" {
-					cleanContent = strings.TrimPrefix(fileContent, "file:///")
-				} else {
-					cleanContent = strings.TrimPrefix(fileContent, "file://")
+				// 解码与安全校验统一由 resolveLocalMedia 完成
+				safePath, err := resolveLocalMedia(fileContent)
+				if err != nil {
+					mylog.Printf("安全校验失败，跳过本地文件: %v", err)
+					break
 				}
-				// 解码 URL 编码（如 %E7%A5%9E → 神）
-				if decoded, err := neturl.PathUnescape(cleanContent); err == nil {
-					cleanContent = decoded
-				}
-				foundItems["local_file"] = append(foundItems["local_file"], cleanContent)
+				foundItems["local_file"] = append(foundItems["local_file"], safePath)
 			} else if strings.HasPrefix(fileContent, "http://") {
 				cleanContent := strings.TrimPrefix(fileContent, "http://")
 				foundItems["url_file"] = append(foundItems["url_file"], cleanContent)
@@ -980,17 +1135,43 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 				foundItems["file_name"] = append(foundItems["file_name"], fileName)
 			}
 
-		default:
-			mylog.Printf("Unhandled message type: %s", messageType)
-		}
+		case "video":
+			fileContent, _ := message["data"].(map[string]interface{})["file"].(string)
+			if strings.HasPrefix(fileContent, "http://") {
+				cleanContent := strings.TrimPrefix(fileContent, "http://")
+				foundItems["url_video"] = append(foundItems["url_video"], cleanContent)
+			} else if strings.HasPrefix(fileContent, "https://") {
+				cleanContent := strings.TrimPrefix(fileContent, "https://")
+				foundItems["url_videos"] = append(foundItems["url_videos"], cleanContent)
+			} else if strings.HasPrefix(fileContent, "base64://") {
+				cleanContent := strings.TrimPrefix(fileContent, "base64://")
+				foundItems["base64_video"] = append(foundItems["base64_video"], cleanContent)
+			} else if strings.HasPrefix(fileContent, "file://") {
+				safePath, err := resolveLocalMedia(fileContent)
+				if err != nil {
+					mylog.Printf("安全校验失败，跳过本地视频: %v", err)
+					break
+				}
+				foundItems["local_video"] = append(foundItems["local_video"], safePath)
+			}
 
-	default:
-		mylog.Println("Unsupported message format: params.message field is not a string, map or slice")
+		   case "music":
+		    musicType, _ := message["data"].(map[string]interface{})["type"].(string)
+		    musicID, _ := message["data"].(map[string]interface{})["id"].(string)
+		    if musicType == "qq" && musicID != "" {
+		     foundItems["qqmusic"] = append(foundItems["qqmusic"], musicID)
+		    }
+
+		   default:
+		    mylog.Printf("Unhandled message type: %s", messageType)
+		   }
+
+		  default:
+		   mylog.Println("Unsupported message format: params.message field is not a string, map or slice")
 	}
 
 	// 从 messageText 中提取 [CQ:reply,id=数字] 用于构建 message_reference
-	replyRe := regexp.MustCompile(`\[CQ:reply,id=(\d+)\]`)
-	for _, matches := range replyRe.FindAllStringSubmatch(messageText, -1) {
+	  for _, matches := range replyRe.FindAllStringSubmatch(messageText, -1) {
 		if len(matches) > 1 {
 			foundItems["reply_msg_id"] = append(foundItems["reply_msg_id"], matches[1])
 		}
@@ -1010,31 +1191,8 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 
 	// 当匹配到复古cq码上报类型,使用低效率正则.
 	if _, ok := paramsMessage.Message.(string); ok {
-		// 正则表达式部分
-		var localImagePattern *regexp.Regexp
-		var localRecordPattern *regexp.Regexp
-		if runtime.GOOS == "windows" {
-			localImagePattern = regexp.MustCompile(`\[CQ:image,file=file:///([^\]]+?)\]`)
-		} else {
-			localImagePattern = regexp.MustCompile(`\[CQ:image,file=file://([^\]]+?)\]`)
-		}
-		if runtime.GOOS == "windows" {
-			localRecordPattern = regexp.MustCompile(`\[CQ:record,file=file:///([^\]]+?)\]`)
-		} else {
-			localRecordPattern = regexp.MustCompile(`\[CQ:record,file=file://([^\]]+?)\]`)
-		}
-		httpUrlImagePattern := regexp.MustCompile(`\[CQ:image,file=http://(.+?)\]`)
-		httpsUrlImagePattern := regexp.MustCompile(`\[CQ:image,file=https://(.+?)\]`)
-		base64ImagePattern := regexp.MustCompile(`\[CQ:image,file=base64://(.+?)\]`)
-		base64RecordPattern := regexp.MustCompile(`\[CQ:record,file=base64://(.+?)\]`)
-		httpUrlRecordPattern := regexp.MustCompile(`\[CQ:record,file=http://(.+?)\]`)
-		httpsUrlRecordPattern := regexp.MustCompile(`\[CQ:record,file=https://(.+?)\]`)
-		httpUrlVideoPattern := regexp.MustCompile(`\[CQ:video,file=http://(.+?)\]`)
-		httpsUrlVideoPattern := regexp.MustCompile(`\[CQ:video,file=https://(.+?)\]`)
-
-		mdPattern := regexp.MustCompile(`\[CQ:markdown,data=base64://(.+?)\]`)
-		mdJSONPattern := regexp.MustCompile(`\[CQ:markdown,data=(\{.*\})\]`)
-		qqMusicPattern := regexp.MustCompile(`\[CQ:music,type=qq,id=(\d+)\]`)
+		// 使用包级正则变量（避免重复编译）
+		compilePatternsOnce.Do(initPlatformPatterns)
 
 		// 处理 [CQ:markdown,data={...}] JSON 格式：base64 编码后存入 foundItems["markdown"]
 		messageText = mdJSONPattern.ReplaceAllStringFunc(messageText, func(match string) string {
@@ -1060,7 +1218,9 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 			{"markdown", mdPattern},
 			{"qqmusic", qqMusicPattern},
 			{"url_video", httpUrlVideoPattern},
-			{"url_videos", httpsUrlVideoPattern},
+			    {"url_videos", httpsUrlVideoPattern},
+			    {"base64_video", base64VideoPattern},
+			    {"local_video", localVideoPattern},
 		}
 
 		for _, pattern := range patterns {
@@ -1963,38 +2123,73 @@ func ResolveMarkdownAtMentions(content string) string {
 	})
 }
 
-// ResolveMarkdownImages 处理 Markdown 内容中的 ![](path) 图片
+func resolveMarkdownMediaReferences(content string, resolve func(path string) (string, bool)) string {
+	if content == "" || resolve == nil {
+		return content
+	}
+
+	markdownPattern := regexp.MustCompile(`(!?)\[([^\]]*)\]\(([^)]+)\)`)
+	htmlImgPattern := regexp.MustCompile(`(?i)(<img\b[^>]*?\bsrc=)(["']?)([^"'\s>]+)([^>]*>)`)
+
+	content = markdownPattern.ReplaceAllStringFunc(content, func(match string) string {
+		parts := markdownPattern.FindStringSubmatch(match)
+		if len(parts) < 4 {
+			return match
+		}
+		prefix := parts[1]
+		altText := parts[2]
+		mediaPath := parts[3]
+		if rewritten, ok := resolve(mediaPath); ok {
+			return prefix + "[" + altText + "](" + rewritten + ")"
+		}
+		return match
+	})
+
+	content = htmlImgPattern.ReplaceAllStringFunc(content, func(match string) string {
+		parts := htmlImgPattern.FindStringSubmatch(match)
+		if len(parts) < 5 {
+			return match
+		}
+		if rewritten, ok := resolve(parts[3]); ok {
+			return parts[1] + parts[2] + rewritten + parts[4]
+		}
+		return match
+	})
+
+	return content
+}
+
+// ResolveMarkdownImages 处理 Markdown 内容中的 ![](path) 图片、[link](path) 和 HTML img 标签
 // - 本地文件路径（file:// 或绝对路径）→ 上传到 QQ CDN，替换为 CDN URL
 // - HTTP(S) URL → 直接保留
 func ResolveMarkdownImages(content string, apiv2 openapi.OpenAPI) string {
-	re := regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
-	return re.ReplaceAllStringFunc(content, func(m string) string {
-		parts := re.FindStringSubmatch(m)
-		if len(parts) < 3 {
-			return m
+	return resolveMarkdownMediaReferences(content, func(mediaPath string) (string, bool) {
+		if strings.HasPrefix(mediaPath, "http://") || strings.HasPrefix(mediaPath, "https://") {
+			return "", false
 		}
-		altText := parts[1]
-		imgPath := parts[2]
-
-		// HTTP(S) URL 直接保留
-		if strings.HasPrefix(imgPath, "http://") || strings.HasPrefix(imgPath, "https://") {
-			return m
+		if strings.HasPrefix(mediaPath, "data:") {
+			return "", false
 		}
-
-		// 本地文件：去除 file:// 前缀后读取
-		localPath := strings.TrimPrefix(imgPath, "file://")
+		localPath := strings.TrimPrefix(mediaPath, "file://")
+		// 安全校验：防止路径穿越
+		safePath, err := safeLocalPath(localPath, ".")
+		if err != nil {
+			mylog.Printf("安全校验失败，跳过Markdown本地图片: %v", err)
+			return "", false
+		}
+		localPath = safePath
 		imageData, err := os.ReadFile(localPath)
 		if err != nil {
 			mylog.Printf("Error reading local image for markdown: %v", err)
-			return m
+			return "", false
 		}
 		base64Encoded := base64.StdEncoding.EncodeToString(imageData)
 		cdnURL, _, _, err := images.UploadBase64ImageToServer(base64Encoded, apiv2)
 		if err != nil {
 			mylog.Printf("Error uploading image for markdown: %v", err)
-			return m
+			return "", false
 		}
-		return "![" + altText + "](" + cdnURL + ")"
+		return cdnURL, true
 	})
 }
 
@@ -2205,15 +2400,12 @@ func ProcessCQFile(text string, foundItems map[string][]string) string {
 		switch {
 		case strings.HasPrefix(filePath, "file://"):
 			itemKey = "local_file"
-			if runtime.GOOS == "windows" {
-				cleanValue = strings.TrimPrefix(filePath, "file:///")
-			} else {
-				cleanValue = strings.TrimPrefix(filePath, "file://")
+			safePath, err := resolveLocalMedia(filePath)
+			if err != nil {
+				mylog.Printf("安全校验失败，跳过本地文件: %v", err)
+				return match
 			}
-			// 解码 URL 编码
-			if decoded, err := neturl.PathUnescape(cleanValue); err == nil {
-				cleanValue = decoded
-			}
+			cleanValue = safePath
 		case strings.HasPrefix(filePath, "http://"):
 			itemKey = "url_file"
 			cleanValue = strings.TrimPrefix(filePath, "http://")

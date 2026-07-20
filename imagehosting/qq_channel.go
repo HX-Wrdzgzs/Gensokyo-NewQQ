@@ -18,8 +18,8 @@ func tryQQChannel(data []byte, filename string) (string, error) {
 	cfg := config.GetImageHostingQQChannel()
 	channelID := strings.TrimSpace(cfg.ChannelID)
 	token := strings.TrimSpace(config.GetImageHostingQQChannelToken())
-	if !cfg.Enabled || channelID == "" || token == "" {
-		return "", fmt.Errorf("QQ频道未完整配置或未启用")
+	if channelID == "" || token == "" {
+		return "", fmt.Errorf("QQ频道未完整配置（请填写 channel_id 和 token）")
 	}
 
 	filename = ensureExt(filename, data)

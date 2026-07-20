@@ -81,7 +81,10 @@ settings:
   auto_bind : true                  #测试功能,后期会移除
 
   #发图相关
-  oss_type : 0                      #请完善后方具体配置 完成#腾讯云配置...,0代表配置server dir port服务器自行上传(省钱),1,腾讯cos存储桶 2,百度oss存储桶 3,阿里oss存储桶
+  # oss_type 仅控制图片上传路径；语音上传不受此选项影响（仍走本机或 1~3 云OSS）
+  # 0=本机上传 1=腾讯云COS(旧t_COS_*) 2=百度云BOS 3=阿里云OSS 4=腾讯云COS自签(image_hosting.cos)
+  # 5=Bilibili 6=QQ频道 7=ChatGLM 8=Ukaka 9=星野 10=Nature
+  oss_type : 0                      #请完善后方具体配置; 同时只能选择一个,避免多个图床同时启用导致错误
   image_sizelimit : 0               #代表kb 腾讯api要求图片1500ms完成传输 如果图片发不出 请提升上行或设置此值 默认为0 不压缩
   image_limit : 100                 #每分钟上传的最大图片数量,可自行增加
   guild_url_image_to_base64 : false #解决频道发不了某些url图片,报错40003问题
@@ -94,7 +97,7 @@ settings:
   #正向ws设置
   ws_server_path : "ws"             #默认监听0.0.0.0:port/ws_server_path 若有安全需求,可不放通port到公网,或设置ws_server_token 若想监听/ 可改为"",若想监听到不带/地址请写nil
   enable_ws_server: true            #是否启用正向ws服务器 监听server_dir:port/ws_server_path
-  ws_server_token : "12345"         #正向ws的token 不启动正向ws可忽略 可为空
+  ws_server_token : ""               #正向ws的token 不启动正向ws可忽略 建议设置强密码
 
   #SSL配置类 和 白名单域名自动验证
   identify_file : true               #自动生成域名校验文件,在q.qq.com配置信息URL,在server_dir填入自己已备案域名,正确解析到机器人所在服务器ip地址,机器人即可发送链接
@@ -118,8 +121,8 @@ settings:
 
   #webui设置
   disable_webui: false              #禁用webui
-  server_user_name : "useradmin"    #默认网页面板用户名
-  server_user_password : "admin"    #默认网页面板密码
+  server_user_name : ""             #默认网页面板用户名 建议设置强密码
+  server_user_password : ""         #默认网页面板密码 建议设置强密码
 
   #指令魔法类
   remove_prefix : false             #是否忽略公域机器人指令前第一个/
@@ -259,6 +262,13 @@ settings:
   t_COS_SECRETKEY : ""              #用户的 SECRETKEY 请腾讯云搜索 api密钥管理 生成并填写.妥善保存 避免泄露
   t_audit : false                   #是否审核内容 请先到控制台开启
 
+  cos:                            #腾讯云COS自签（oss_type=4，需配置secret_id/secret_key）
+    secret_id: ""                 #腾讯云 API SecretId
+    secret_key: ""                #腾讯云 API SecretKey
+    region: "ap-guangzhou"        #存储桶地域
+    bucket: ""                    #存储桶名称
+    domain: ""                    #自定义域名（留空使用COS默认域名）
+
   #百度云配置
   b_BOS_BUCKETNAME : ""             #百度智能云-BOS控制台-Bucket列表-需要选择的存储桶-域名发布信息-完整官方域名-填入 形如 hellow.gz.bcebos.com
   b_BCE_AK : ""                     #百度 BCE的 AK 获取方法 https://cloud.baidu.com/doc/BOS/s/Tjwvyrw7a 
@@ -272,32 +282,17 @@ settings:
   a_OSS_AccessKeySecret : ""
   a_audit : false                   #是否审核图片 请先开通阿里云内容安全需企业认证。具体操作 请参见https://help.aliyun.com/document_detail/69806.html
 
-  #统一图床服务（按配置顺序依次尝试，第一个成功的返回URL）
-  image_hosting:
-    cos:                            #腾讯云COS（需配置secret_id/secret_key）
-      enabled: false
-      secret_id: ""                 #腾讯云 API SecretId
-      secret_key: ""                #腾讯云 API SecretKey
-      region: "ap-guangzhou"        #存储桶地域
-      bucket: ""                    #存储桶名称
-      domain: ""                    #自定义域名（留空使用COS默认域名）
-    bilibili:                       #B站图床（需配置Cookie）
-      enabled: false
-      csrf_token: ""                #B站bili_jct
-      sessdata: ""                  #B站SESSDATA
-      bucket: "openplatform"
-    qq_channel:                     #QQ频道图床（需channel_id+token）
-      enabled: false
-      channel_id: ""
-      token: ""                     #Authorization值，如"QQBot xxx.yyy"
-    chatglm:                        #智谱免费图床（开箱即用）
-      enabled: true
-    ukaka:                          #Ukaka免费图床（开箱即用）
-      enabled: true
-    xingye:                         #星野免费图床（开箱即用）
-      enabled: true
-    nature:                         #Nature腾讯COS直传（密钥内置，开箱即用）
-      enabled: true
+  bilibili:                       #B站图床（oss_type=5，需配置Cookie）
+    csrf_token: ""                #B站bili_jct
+    sessdata: ""                  #B站SESSDATA
+    bucket: "openplatform"
+  qq_channel:                     #QQ频道图床（oss_type=6，需channel_id+token）
+    channel_id: ""
+    token: ""                     #Authorization值，如"QQBot xxx.yyy"
+  chatglm:                        #智谱免费图床（oss_type=7，开箱即用）
+  ukaka:                          #Ukaka免费图床（oss_type=8，开箱即用）
+  xingye:                         #星野免费图床（oss_type=9，开箱即用）
+  nature:                         #Nature腾讯COS直传（oss_type=10，密钥内置，开箱即用）
 
 `
 const Logo = `

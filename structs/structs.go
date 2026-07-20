@@ -66,8 +66,14 @@ type Settings struct {
 	GlobalServerTempQQguild bool     `yaml:"global_server_temp_qqguild"`
 	ServerTempQQguild       string   `yaml:"server_temp_qqguild"`
 	ServerTempQQguildPool   []string `yaml:"server_temp_qqguild_pool"`
-	//图床相关
-	ImageHosting ImageHostingConfig `yaml:"image_hosting"`
+	//图床相关（原 image_hosting 嵌套已展平至 Settings 顶层）
+	COS       ImageHostingCOS       `yaml:"cos"`
+	Bilibili  ImageHostingBilibili  `yaml:"bilibili"`
+	QQChannel ImageHostingQQChannel `yaml:"qq_channel"`
+	ChatGLM   ImageHostingSimple    `yaml:"chatglm"`
+	Ukaka     ImageHostingSimple    `yaml:"ukaka"`
+	Xingye    ImageHostingSimple    `yaml:"xingye"`
+	Nature    ImageHostingSimple    `yaml:"nature"`
 	//正向ws设置
 	WsServerPath   string `yaml:"ws_server_path"`
 	EnableWsServer bool   `yaml:"enable_ws_server"`
@@ -200,22 +206,22 @@ type Settings struct {
 	PostSecret          []string `yaml:"post_secret"`
 	PostMaxRetries      []int    `yaml:"post_max_retries"`
 	PostRetriesInterval []int    `yaml:"post_retries_interval"`
-	//腾讯云
+	//腾讯云配置
 	TencentBucketName   string `yaml:"t_COS_BUCKETNAME"`
 	TencentBucketRegion string `yaml:"t_COS_REGION"`
 	TencentCosSecretid  string `yaml:"t_COS_SECRETID"`
 	TencentSecretKey    string `yaml:"t_COS_SECRETKEY"`
 	TencentAudit        bool   `yaml:"t_audit"`
-	//百度云
+	//百度云配置
 	BaiduBOSBucketName string `yaml:"b_BOS_BUCKETNAME"`
 	BaiduBCEAK         string `yaml:"b_BCE_AK"`
 	BaiduBCESK         string `yaml:"b_BCE_SK"`
 	BaiduAudit         int    `yaml:"b_audit"`
-	//阿里云
+	//阿里云配置
 	AliyunEndpoint        string `yaml:"a_OSS_EndPoint"`
+	AliyunBucketName      string `yaml:"a_OSS_BucketName"`
 	AliyunAccessKeyId     string `yaml:"a_OSS_AccessKeyId"`
 	AliyunAccessKeySecret string `yaml:"a_OSS_AccessKeySecret"`
-	AliyunBucketName      string `yaml:"a_OSS_BucketName"`
 	AliyunAudit           bool   `yaml:"a_audit"`
 	// 额外 intent 位探测（用于发现未文档化的事件位）
 	ExtraIntents []int `yaml:"extra_intents"`
@@ -230,21 +236,9 @@ type VisualPrefixConfig struct {
 	NoWhiteResponse string   `yaml:"No_White_Response"`
 }
 
-// ImageHostingConfig 统一图床服务配置
-// 各图床按配置顺序依次尝试，第一个成功的返回结果
-type ImageHostingConfig struct {
-	COS       ImageHostingCOS       `yaml:"cos"`
-	Bilibili  ImageHostingBilibili  `yaml:"bilibili"`
-	QQChannel ImageHostingQQChannel `yaml:"qq_channel"`
-	ChatGLM   ImageHostingSimple    `yaml:"chatglm"`
-	Ukaka     ImageHostingSimple    `yaml:"ukaka"`
-	Xingye    ImageHostingSimple    `yaml:"xingye"`
-	Nature    ImageHostingSimple    `yaml:"nature"`
-}
-
 // ImageHostingCOS 腾讯云 COS 配置
+// 仅当 oss_type=4 时生效，凭据非空时自动启用
 type ImageHostingCOS struct {
-	Enabled   bool   `yaml:"enabled"`
 	SecretID  string `yaml:"secret_id"`
 	SecretKey string `yaml:"secret_key"`
 	Region    string `yaml:"region"`
@@ -253,25 +247,24 @@ type ImageHostingCOS struct {
 }
 
 // ImageHostingBilibili B站图床配置
+// 仅当 oss_type=5 时生效，凭据非空时自动启用
 type ImageHostingBilibili struct {
-	Enabled   bool   `yaml:"enabled"`
 	CSRFToken string `yaml:"csrf_token"`
 	Sessdata  string `yaml:"sessdata"`
 	Bucket    string `yaml:"bucket"`
 }
 
 // ImageHostingQQChannel QQ频道图床配置
+// 仅当 oss_type=6 时生效，凭据非空时自动启用
 // Token 填写完整 Authorization 值，如 "QQBot xxx.yyy"
 type ImageHostingQQChannel struct {
-	Enabled   bool   `yaml:"enabled"`
 	ChannelID string `yaml:"channel_id"`
 	Token     string `yaml:"token"`
 }
 
-// ImageHostingSimple 简单的开关配置（ChatGLM / Ukaka / 星野 / Nature）
-type ImageHostingSimple struct {
-	Enabled bool `yaml:"enabled"`
-}
+// ImageHostingSimple 开箱即用的免费图床（ChatGLM / Ukaka / 星野 / Nature）
+// 无需配置，选中对应 oss_type 即可使用
+type ImageHostingSimple struct{}
 
 type InterfaceBody struct {
 	Content        string   `json:"content"`

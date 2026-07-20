@@ -1,13 +1,14 @@
 package handlers
 
 import (
-	"context"
-	"encoding/base64"
-	"io"
-	"net/http"
-	"os"
-	"strings"
-	"time"
+  "context"
+  "encoding/base64"
+  "fmt"
+  "io"
+  "net/http"
+  "os"
+  "strings"
+  "time"
 
 	"github.com/hoshinonyaruko/gensokyo/callapi"
 	"github.com/hoshinonyaruko/gensokyo/config"
@@ -115,10 +116,15 @@ func HandleSendGuildChannelMsg(client callapi.Client, api openapi.OpenAPI, apiv2
 			mylog.Println("通过lazymsgid发送频道主动信息,若非主动信息请提交issue")
 		}
 		//开发环境用
-		if config.GetDevMsgID() {
-			messageID = "1000"
-		}
-		mylog.Println("频道发信息messageText:", messageText)
+		   if config.GetDevMsgID() {
+		    messageID = "1000"
+		   }
+		   // [CQ:active] 标记：强制走主动推送
+		   if _, ok := foundItems["active"]; ok {
+		    messageID = ""
+		    mylog.Println("[CQ:active] 标记，强制主动推送")
+		   }
+		   mylog.Println("频道发信息messageText:", messageText)
 		//mylog.Println("foundItems:", foundItems)
 		var singleItem = make(map[string][]string)
 		var imageType, imageUrl string
@@ -254,21 +260,76 @@ func HandleSendGuildChannelMsg(client callapi.Client, api openapi.OpenAPI, apiv2
 		}
 
 		// 优先发送文本信息
-		var err error
-		if messageText != "" {
-			msgseq := echo.GetMappingSeq(messageID)
-			echo.AddMappingSeq(messageID, msgseq+1)
-			textMsg, _ := GenerateReplyMessage(messageID, nil, messageText, msgseq+1, nil)
-			if resp, err = api.PostMessage(context.TODO(), channelID.(string), textMsg); err != nil {
-				mylog.Printf("发送文本信息失败: %v", err)
-			}
-			//发送成功回执
-			retmsg, _ = SendGuildResponse(client, err, &message, resp)
-		}
+		   var err error
+		   if messageText != "" {
+		    // [CQ:member] 频道不支持，记录日志
+		    if strings.Contains(messageText, "[CQ:member]") {
+		     mylog.Printf("[CQ:member] 频道消息不支持群成员变动路由，已忽略")
+		    }
+		    // [CQ:remove] 频道不支持，记录日志
+		    messageText = ProcessCQRemoveOutbound(messageText, apiv2, channelID.(string))
 
-		// 遍历foundItems并发送每种信息
-		for key, urls := range foundItems {
-			for _, url := range urls {
+		    var md *dto.Markdown
+		    var kb *keyboard.MessageKeyboard
+		    if mdItems, ok := foundItems["markdown"]; ok && len(mdItems) > 0 {
+		     md, kb = parseMarkdownFromMessage(mdItems[0])
+		     if md != nil && md.Content != "" {
+		      md.Content = ResolveMarkdownAtMentions(md.Content)
+		     }
+		    }
+
+		    msgseq := echo.GetMappingSeq(messageID)
+		    echo.AddMappingSeq(messageID, msgseq+1)
+		    textMsg, _ := GenerateReplyMessage(messageID, nil, messageText, msgseq+1, nil)
+
+		    // 如果有 markdown，改为 markdown 消息
+		    if md != nil {
+		     textMsg.Markdown = md
+		     textMsg.Keyboard = kb
+		     textMsg.MsgType = 2
+		     textMsg.Content = ""
+		     delete(foundItems, "markdown")
+		     mylog.Printf("[CQ:markdown] 将频道消息类型切换为 markdown")
+		    }
+
+		    // 处理 [CQ:reply,id=数字] → message_reference + msg_id
+		           if replyIDs, ok := foundItems["reply_msg_id"]; ok && len(replyIDs) > 0 {
+		            if messageText != "" {
+		             realReplyID, err := idmap.RetrieveRowByCachev2(replyIDs[0])
+		             if err == nil && realReplyID != "" {
+		              parts := strings.Split(realReplyID, " ")
+		              refID := parts[len(parts)-1]
+		              textMsg.MessageReference = &dto.MessageReference{
+		               MessageID:             refID,
+		               IgnoreGetMessageError: true,
+		              }
+		              // 同时设置 msg_id，确保 v2 API 识别为回复
+		              textMsg.MsgID = refID
+		              mylog.Printf("[CQ:reply] 设置频道回复消息: msg_id=%s", refID)
+		             } else {
+		              mylog.Printf("[CQ:reply] 虚拟 ID %s 反查失败: %v", replyIDs[0], err)
+		             }
+		            }
+		           }
+
+		    if resp, err = api.PostMessage(context.TODO(), channelID.(string), textMsg); err != nil {
+		     mylog.Printf("发送文本信息失败: %v", err)
+		    }
+		    //发送成功回执
+		    retmsg, _ = SendGuildResponse(client, err, &message, resp)
+		   }
+
+		   // 遍历foundItems并发送每种信息
+		   for key, urls := range foundItems {
+		    // 跳过控制型 key 和频道不支持的媒体类型
+		    if key == "active" || key == "active_type" || key == "active_sub_type" ||
+		     key == "reply_msg_id" || key == "file_name" ||
+		     key == "markdown" || key == "qqmusic" ||
+		     key == "local_file" || key == "url_file" || key == "url_files" || key == "base64_file" ||
+		     key == "url_video" || key == "url_videos" {
+		     continue
+		    }
+		    for _, url := range urls {
 				singleItem[key] = []string{url} // 创建一个只有一个 URL 的 singleItem
 				msgseq := echo.GetMappingSeq(messageID)
 				echo.AddMappingSeq(messageID, msgseq+1)
@@ -530,8 +591,18 @@ func GenerateReplyMessage(id string, foundItems map[string][]string, messageText
 
 // downloadImageAndConvertToBase64 下载图片并转换为 base64 编码字符串
 func downloadImageAndConvertToBase64(url string) (string, error) {
+	// SSRF 校验：禁止访问私有地址、回环地址、链路本地地址
+	if isPrivateOrLoopback(url) {
+		return "", fmt.Errorf("SSRF 阻止: 目标地址为私有地址: %s", url)
+	}
+
+	// 设置带超时的 HTTP Client（30 秒超时）
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
 	// 发送 HTTP GET 请求以获取图片数据
-	resp, err := http.Get(url)
+	resp, err := client.Get(url)
 	if err != nil {
 		return "", err // 返回错误
 	}

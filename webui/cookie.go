@@ -3,6 +3,7 @@ package webui
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -39,6 +40,9 @@ func CloseDB() {
 }
 
 func GenerateCookie() (string, error) {
+	if db == nil {
+		return "", fmt.Errorf("cookie database is not initialized")
+	}
 	cookie := uuid.New().String()
 	expiration := time.Now().Add(ExpirationHours * time.Hour).Unix()
 
@@ -58,6 +62,9 @@ func GenerateCookie() (string, error) {
 }
 
 func ValidateCookie(cookie string) (bool, error) {
+	if db == nil {
+		return false, fmt.Errorf("cookie database is not initialized")
+	}
 	isValid := false
 	err := db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte(CookieBucket))

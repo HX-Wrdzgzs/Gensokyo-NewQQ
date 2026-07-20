@@ -230,6 +230,24 @@ Markdown 内容中的 `![](path)` 图片，Gensokyo 会自动处理：
 ![](file:///C:/Users/xxx/Pictures/photo.png)
 ```
 
+### QQ Markdown 图片尺寸语法
+
+QQ 官方 Markdown 支持在图片中指定显示尺寸，语法为：
+
+```markdown
+![#100px #100px](图片链接)
+```
+
+`#100px` 分别表示宽度和高度，单位 `px`，必须两个都指定
+
+| 语法 | 效果 |
+|------|------|
+| `![#100px](图片链接)` | 宽度 100px，高度自适应 |
+| `![#100px #100px](图片链接)` | 宽高均为 100px |
+| `![#100px #200px](图片链接)` | 宽度 100px，高度 200px |
+
+Gensokyo 自动上传本地图片到 QQ CDN 后，会保留该尺寸语法不变，确保图片按预期尺寸展示。
+
 ## 参考
 
 - [QQ 官方 Markdown 文档](https://bot.q.qq.com/wiki/develop/api/openapi/message/post_keyboard_messages.html)

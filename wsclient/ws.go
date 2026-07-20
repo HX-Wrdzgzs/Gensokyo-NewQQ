@@ -128,7 +128,7 @@ func (client *WebSocketClient) Reconnect() {
 	if token != "" {
 		headers["Authorization"] = []string{"Token " + token}
 	}
-	mylog.Printf("准备使用token[%s]重新连接到[%s]\n", token, client.urlStr)
+	mylog.Printf("准备使用token[%s]重新连接到[%s]\n", redactToken(token), client.urlStr)
 	dialer := websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 45 * time.Second,
@@ -308,7 +308,7 @@ func NewWebSocketClient(urlStr string, botID uint64, api openapi.OpenAPI, apiv2 
 	if token != "" {
 		headers["Authorization"] = []string{"Token " + token}
 	}
-	mylog.Printf("准备使用token[%s]连接到[%s]\n", token, urlStr)
+	mylog.Printf("准备使用token[%s]连接到[%s]\n", redactToken(token), urlStr)
 	dialer := websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 45 * time.Second,
@@ -392,4 +392,12 @@ func getParamsFromURI(uriStr string) map[string]string {
 	}
 
 	return params
+}
+
+// redactToken 对令牌进行脱敏，只显示前 4 位
+func redactToken(s string) string {
+	if len(s) <= 4 {
+		return "****"
+	}
+	return s[:4] + "****"
 }

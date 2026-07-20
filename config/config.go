@@ -60,7 +60,7 @@ func LoadConfig(path string, fastload bool) (*Config, error) {
 	// 清理配置文件中因旧版 bug 产生的重复 settings:/version 行
 	if cleaned := cleanupDuplicateSettings(configData); len(cleaned) != len(configData) {
 		configData = cleaned
-		_ = os.WriteFile(path, configData, 0644)
+		_ = os.WriteFile(path, configData, 0600)
 	}
 
 	// 检查并替换视觉前缀行，如果有必要，后期会注释
@@ -68,7 +68,7 @@ func LoadConfig(path string, fastload bool) (*Config, error) {
 	// configData, isChange = replaceVisualPrefixsLine(configData)
 	// if isChange {
 	// 	// 如果配置文件已修改，重新写入修正后的数据
-	// 	if err = os.WriteFile(path, configData, 0644); err != nil {
+	// 	if err = os.WriteFile(path, configData, 0600); err != nil {
 	// 		return nil, err // 处理写入错误
 	// 	}
 	// }
@@ -322,7 +322,7 @@ func addCommentsToConfigTemp(template, tempFilePath string) error {
 	updatedContent := strings.Join(lines, "\n")
 
 	// 写回更新后的内容到原配置文件
-	err = os.WriteFile(tempFilePath, []byte(updatedContent), 0644)
+	err = os.WriteFile(tempFilePath, []byte(updatedContent), 0600)
 	if err != nil {
 		return err
 	}
@@ -423,8 +423,8 @@ func getMissingSettingsByReflection(currentConfig, defaultConfig *Config) (map[s
 	for i := 0; i < currentVal.NumField(); i++ {
 		field := currentVal.Type().Field(i)
 		yamlTag := field.Tag.Get("yaml")
-		if yamlTag == "" || field.Type.Kind() == reflect.Int || field.Type.Kind() == reflect.Bool {
-			continue // 跳过没有yaml标签的字段，或者字段类型为int或bool
+		if yamlTag == "" {
+			continue // 跳过没有yaml标签的字段
 		}
 		yamlKeyName := strings.SplitN(yamlTag, ",", 2)[0]
 		// 跳过结构体类型的字段（如 Settings），无法通过追加一行来修复
@@ -453,17 +453,17 @@ func getMissingSettingsByText(templateContent, currentConfigContent string) (map
 			missingSettings[key] = "missing"
 		}
 	}
-
-	// 第一轮过滤：如果父 key 已在配置中存在 → 跳过（属于已存在的块）
-	for key := range missingSettings {
-		parent, hasParent := parentMap[key]
-		if !hasParent {
-			continue
-		}
-		if _, parentExists := currentKeys[parent]; parentExists {
-			delete(missingSettings, key)
-		}
-	}
+		// 第一轮过滤：如果父 key 已在配置中存在 → 跳过（属于已存在的块）
+	  // 但父 key 为 "settings" 时不过滤（顶级配置项，单独缺失需要追加）
+	  for key := range missingSettings {
+	   parent, hasParent := parentMap[key]
+	   if !hasParent || parent == "settings" {
+	    continue
+	   }
+	   if _, parentExists := currentKeys[parent]; parentExists {
+	    delete(missingSettings, key)
+	   }
+	  }
 
 	// 第二轮：如果某个缺失 key 的祖先 key 不在配置中，补上祖先 key
 	// 例如子 key 缺失但父 `image_hosting` 也不在配置中 → 把 `image_hosting` 加入缺失
@@ -494,7 +494,15 @@ func getMissingSettingsByText(templateContent, currentConfigContent string) (map
 		}
 	}
 
-	return missingSettings, nil
+	// 第四轮：只保留 settings 下的直接缺失项，避免子 key 被单独追加造成结构混乱
+	topLevelMissing := make(map[string]string)
+	for key := range missingSettings {
+		if parentMap[key] == "settings" {
+			topLevelMissing[key] = "missing"
+		}
+	}
+
+	return topLevelMissing, nil
 }
 
 // buildParentKeyMap 解析模板，为每个 key 找到其父 key
@@ -539,18 +547,23 @@ func buildParentKeyMap(templateContent string) map[string]string {
 	return parentMap
 }
 
-// extractKeysFromString reads a string and extracts the keys (text before the colon).
-func extractKeysFromString(content string) map[string]bool {
-	keys := make(map[string]bool)
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, ":") {
-			key := strings.TrimSpace(strings.Split(line, ":")[0])
-			keys[key] = true
+	// extractKeysFromString reads a string and extracts the keys (text before the colon).
+	func extractKeysFromString(content string) map[string]bool {
+		keys := make(map[string]bool)
+		lines := strings.Split(content, "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			// 跳过空行和注释行
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			if strings.Contains(line, ":") {
+				key := strings.TrimSpace(strings.Split(line, ":")[0])
+				keys[key] = true
+			}
 		}
+		return keys
 	}
-	return keys
-}
 
 func extractMissingConfigLines(missingSettings map[string]string, configTemplate string) ([]string, error) {
 	var missingConfigLines []string
@@ -597,7 +610,7 @@ func extractMissingConfigLines(missingSettings map[string]string, configTemplate
 }
 
 func appendToConfigFile(path string, lines []string) (int, error) {
-	// 先读取现有内容，用于去重
+	// 先读取现有内容
 	existingBytes, err := os.ReadFile(path)
 	if err != nil {
 		return 0, err
@@ -611,30 +624,91 @@ func appendToConfigFile(path string, lines []string) (int, error) {
 	}
 	defer file.Close()
 
-	// 写入缺失的配置项（去重）
+	// 按配置块写入，对每个顶层 key 做存在性检查，避免同名子 key 被误跳过
 	written := 0
-	for _, line := range lines {
+	i := 0
+	for i < len(lines) {
+		line := lines[i]
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+		if trimmed == "" || !strings.Contains(trimmed, ":") {
+			if trimmed != "" {
+				if _, err := file.WriteString("\n" + line); err != nil {
+					return written, err
+				}
+				written++
+			}
+			i++
 			continue
 		}
-		// 检查该行是否已存在于文件中
-		if strings.Contains(existingContent, trimmed) {
+
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		key := strings.TrimSpace(strings.SplitN(trimmed, ":", 2)[0])
+
+		// 收集当前块（从当前行到下一个同等或更浅缩进的行）
+		var blockLines []string
+		blockLines = append(blockLines, line)
+		j := i + 1
+		for j < len(lines) {
+			nextLine := lines[j]
+			if strings.TrimSpace(nextLine) == "" {
+				blockLines = append(blockLines, nextLine)
+				j++
+				continue
+			}
+			nextIndent := len(nextLine) - len(strings.TrimLeft(nextLine, " \t"))
+			if nextIndent <= indent {
+				break
+			}
+			blockLines = append(blockLines, nextLine)
+			j++
+		}
+
+		// 如果顶层 key 已存在，跳过整个块
+		if keyExistsInConfig(existingContent, key) {
+			i = j
 			continue
 		}
-		if _, err := file.WriteString("\n" + line); err != nil {
-			fmt.Println("写入配置错误:", err)
-			return written, err
+
+		// 写入整个块
+		for _, blockLine := range blockLines {
+			if _, err := file.WriteString("\n" + blockLine); err != nil {
+				fmt.Println("写入配置错误:", err)
+				return written, err
+			}
+			written++
 		}
-		written++
+		i = j
 	}
 
-	// 输出写入状态
 	if written > 0 {
 		fmt.Println("配置已更新，写入到文件:", path)
 	}
 
 	return written, nil
+}
+
+// keyExistsInConfig 检查配置中是否已存在某个顶层 key（按行首缩进判断为同层级）
+func keyExistsInConfig(content, key string) bool {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") || trimmed == "" {
+			continue
+		}
+		if !strings.Contains(trimmed, ":") {
+			continue
+		}
+		// 只检查顶层或 settings 下的同层级 key（缩进为 2 个空格）
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		if indent != 2 {
+			continue
+		}
+		lineKey := strings.TrimSpace(strings.SplitN(trimmed, ":", 2)[0])
+		if lineKey == key {
+			return true
+		}
+	}
+	return false
 }
 
 // cleanupDuplicateSettings 清理配置文件中因旧版 bug 产生的异常。
@@ -727,7 +801,7 @@ func UpdateConfig(conf *Config, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 // WriteYAMLToFile 将YAML格式的字符串写入到指定的文件路径
@@ -746,7 +820,7 @@ func WriteYAMLToFile(yamlContent string) error {
 	configPath := filepath.Join(exeDir, "config.yml")
 
 	// 写入文件
-	os.WriteFile(configPath, []byte(yamlContent), 0644)
+	os.WriteFile(configPath, []byte(yamlContent), 0600)
 
 	sys.RestartApplication()
 	return nil
@@ -784,7 +858,7 @@ func DeleteConfig() error {
 	configData := strings.Replace(template.ConfigTemplate, "<YOUR_SERVER_DIR>", ip, -1)
 
 	// 创建一个新的配置文件模板 写到配置
-	if err := os.WriteFile(configPath, []byte(configData), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configData), 0600); err != nil {
 		fmt.Println("Error writing config.yml:", err)
 		return err
 	}
@@ -1960,6 +2034,51 @@ func GetOssType() int {
 	return instance.Settings.OssType
 }
 
+// oss_type 枚举值（仅控制图片上传路径）
+const (
+	OssTypeLocal     = 0
+	OssTypeTencent   = 1
+	OssTypeBaidu     = 2
+	OssTypeAliyun    = 3
+	OssTypeCOS       = 4
+	OssTypeBilibili  = 5
+	OssTypeQQChannel = 6
+	OssTypeChatGLM   = 7
+	OssTypeUkaka     = 8
+	OssTypeXingye    = 9
+	OssTypeNature    = 10
+)
+
+// GetOssTypeName 返回 oss_type 的可读名称
+func GetOssTypeName(t int) string {
+	switch t {
+	case OssTypeLocal:
+		return "local"
+	case OssTypeTencent:
+		return "tencent_cos"
+	case OssTypeBaidu:
+		return "baidu_bos"
+	case OssTypeAliyun:
+		return "aliyun_oss"
+	case OssTypeCOS:
+		return "cos"
+	case OssTypeBilibili:
+		return "bilibili"
+	case OssTypeQQChannel:
+		return "qq_channel"
+	case OssTypeChatGLM:
+		return "chatglm"
+	case OssTypeUkaka:
+		return "ukaka"
+	case OssTypeXingye:
+		return "xingye"
+	case OssTypeNature:
+		return "nature"
+	default:
+		return "unknown"
+	}
+}
+
 // 获取BaiduBOSBucketName
 func GetBaiduBOSBucketName() string {
 	mu.RLock()
@@ -2478,7 +2597,7 @@ func GetImageHostingCOS() structs.ImageHostingCOS {
 	if instance == nil {
 		return structs.ImageHostingCOS{}
 	}
-	return instance.Settings.ImageHosting.COS
+	return instance.Settings.COS
 }
 
 // GetImageHostingBilibili 获取 Bilibili 图床配置
@@ -2488,7 +2607,7 @@ func GetImageHostingBilibili() structs.ImageHostingBilibili {
 	if instance == nil {
 		return structs.ImageHostingBilibili{}
 	}
-	return instance.Settings.ImageHosting.Bilibili
+	return instance.Settings.Bilibili
 }
 
 // GetImageHostingQQChannel 获取 QQ频道 图床配置
@@ -2498,7 +2617,7 @@ func GetImageHostingQQChannel() structs.ImageHostingQQChannel {
 	if instance == nil {
 		return structs.ImageHostingQQChannel{}
 	}
-	return instance.Settings.ImageHosting.QQChannel
+	return instance.Settings.QQChannel
 }
 
 // GetImageHostingQQChannelToken 获取 QQ频道 图床的 Authorization token
@@ -2508,7 +2627,7 @@ func GetImageHostingQQChannelToken() string {
 	if instance == nil {
 		return ""
 	}
-	return instance.Settings.ImageHosting.QQChannel.Token
+	return instance.Settings.QQChannel.Token
 }
 
 // GetImageHostingChatGLM 获取 ChatGLM 图床配置
@@ -2518,7 +2637,7 @@ func GetImageHostingChatGLM() structs.ImageHostingSimple {
 	if instance == nil {
 		return structs.ImageHostingSimple{}
 	}
-	return instance.Settings.ImageHosting.ChatGLM
+	return instance.Settings.ChatGLM
 }
 
 // GetImageHostingUkaka 获取 Ukaka 图床配置
@@ -2528,7 +2647,7 @@ func GetImageHostingUkaka() structs.ImageHostingSimple {
 	if instance == nil {
 		return structs.ImageHostingSimple{}
 	}
-	return instance.Settings.ImageHosting.Ukaka
+	return instance.Settings.Ukaka
 }
 
 // GetImageHostingXingye 获取 星野 图床配置
@@ -2538,7 +2657,7 @@ func GetImageHostingXingye() structs.ImageHostingSimple {
 	if instance == nil {
 		return structs.ImageHostingSimple{}
 	}
-	return instance.Settings.ImageHosting.Xingye
+	return instance.Settings.Xingye
 }
 
 // GetImageHostingNature 获取 Nature 图床配置
@@ -2548,7 +2667,7 @@ func GetImageHostingNature() structs.ImageHostingSimple {
 	if instance == nil {
 		return structs.ImageHostingSimple{}
 	}
-	return instance.Settings.ImageHosting.Nature
+	return instance.Settings.Nature
 }
 
 // 获取ServerTempQQguild

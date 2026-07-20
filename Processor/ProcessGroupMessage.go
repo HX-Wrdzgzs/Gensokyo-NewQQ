@@ -222,14 +222,15 @@ func (p *Processors) ProcessGroupMessage(data *dto.WSGroupATMessageData) error {
 			ToMe:    toMe,
 		}
 		//增强配置
-		if !config.GetNativeOb11() {
-			groupMsg.RealMessageType = "group"
-			groupMsg.IsBindedUserId = IsBindedUserId
-			groupMsg.IsBindedGroupId = IsBindedGroupId
-			groupMsg.RealGroupID = data.GroupID
-			groupMsg.RealUserID = data.Author.ID
-			groupMsg.Avatar, _ = GenerateAvatarURLV2(data.Author.ID)
-		}
+		   if !config.GetNativeOb11() {
+		    groupMsg.RealMessageType = "group"
+		    groupMsg.IsBindedUserId = IsBindedUserId
+		    groupMsg.IsBindedGroupId = IsBindedGroupId
+		    groupMsg.RealGroupID = data.GroupID
+		    groupMsg.RealUserID = data.Author.ID
+		    groupMsg.Avatar, _ = GenerateAvatarURLV2(data.Author.ID)
+		   }
+		   groupMsg.IsFullGroupMessage = false
 		//根据条件判断是否增加nick和card
 		var CaN = config.GetCardAndNick()
 		if CaN != "" {
@@ -319,12 +320,13 @@ func (p *Processors) ProcessGroupMessage(data *dto.WSGroupATMessageData) error {
 			Platform: platform,
 		}
 		// 增强配置
-		if !config.GetNativeOb11() {
-			groupMsgS.RealMessageType = "group"
-			groupMsgS.RealGroupID = data.GroupID
-			groupMsgS.RealUserID = data.Author.ID
-			groupMsgS.Avatar, _ = GenerateAvatarURLV2(data.Author.ID)
-		}
+		   if !config.GetNativeOb11() {
+		    groupMsgS.RealMessageType = "group"
+		    groupMsgS.RealGroupID = data.GroupID
+		    groupMsgS.RealUserID = data.Author.ID
+		    groupMsgS.Avatar, _ = GenerateAvatarURLV2(data.Author.ID)
+		   }
+		   groupMsgS.IsFullGroupMessage = false
 		//根据条件判断是否增加nick和card
 		var CaN = config.GetCardAndNick()
 		if CaN != "" {

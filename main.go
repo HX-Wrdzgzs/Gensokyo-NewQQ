@@ -453,7 +453,7 @@ func main() {
 	}
 	// 使用 gRPC（Lotus 模式）或 HTTP 处理 IDMap
 	if !initLotusGrpc(conf.Settings.Lotus, conf.Settings.LotusGrpc, conf.Settings.LotusGrpcPort) {
-		r.GET("/getid", server.GetIDHandler)
+		r.GET("/getid", server.IDMapAuthMiddleware(), server.GetIDHandler)
 	}
 
 	webhookHandler := server.NewWebhookHandler(5000)
@@ -461,15 +461,17 @@ func main() {
 	// 启动消息处理协程
 	go webhookHandler.ListenAndProcessMessages()
 
-	r.GET("/updateport", server.HandleIpupdate)
-	r.POST("/delpic", server.DeleteImageHandler(rateLimiter))
-	r.GET("/healthz", HealthzHandler)
-	r.GET("/readyz", HealthzHandler)
-	r.GET("/metrics", MetricsHandler)
-	r.POST("/uploadpic", server.UploadBase64ImageHandler(rateLimiter))
-	r.POST("/uploadpicv2", server.UploadBase64ImageHandlerV2(rateLimiter, apiV2))
-	r.POST("/uploadpicv3", server.UploadBase64ImageHandlerV3(rateLimiter, api))
-	r.POST("/uploadrecord", server.UploadBase64RecordHandler(rateLimiter))
+	uploadAuth := server.UploadAuthMiddleware()
+
+	  r.GET("/updateport", uploadAuth, server.HandleIpupdate)
+	  r.POST("/delpic", uploadAuth, server.DeleteImageHandler(rateLimiter))
+	  r.GET("/healthz", uploadAuth, HealthzHandler)
+	      r.GET("/readyz", uploadAuth, HealthzHandler)
+	      r.GET("/metrics", uploadAuth, MetricsHandler)
+	  r.POST("/uploadpic", uploadAuth, server.UploadBase64ImageHandler(rateLimiter))
+	  r.POST("/uploadpicv2", uploadAuth, server.UploadBase64ImageHandlerV2(rateLimiter, apiV2))
+	  r.POST("/uploadpicv3", uploadAuth, server.UploadBase64ImageHandlerV3(rateLimiter, api))
+	  r.POST("/uploadrecord", uploadAuth, server.UploadBase64RecordHandler(rateLimiter))
 	// 使用 CreateHandleValidation，传入 WebhookHandler 实例
 	server.InitPrivateKey(conf.Settings.ClientSecret)
 	//r.POST("/"+conf.Settings.WebhookPath, server.CreateHandleValidationSafe(webhookHandler))
@@ -1072,6 +1074,16 @@ func setupConfigWatcher(configFilePath string) {
 	}
 }
 
+// 过滤敏感头列表，转发时排除这些 Header
+var sensitiveHeaders = map[string]bool{
+	"authorization": true,
+	"cookie":        true,
+	"set-cookie":    true,
+	"x-token":       true,
+	"x-signature":   true,
+	"x-signature-256": true,
+}
+
 // 包装器：在执行原有处理器前，抓取 Body；在本地处理器运行的同时，异步原样转发到 UnionWebhook。
 func UnionFanout(base gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -1089,6 +1101,13 @@ func UnionFanout(base gin.HandlerFunc) gin.HandlerFunc {
 			method := c.Request.Method
 			headers := c.Request.Header.Clone() // 原样复制请求头
 
+			// 过滤敏感头，避免泄露 Authorization、Cookie 等凭证
+			for k := range headers {
+				if sensitiveHeaders[strings.ToLower(k)] {
+					delete(headers, k)
+				}
+			}
+
 			go func(method, url string, headers http.Header, payload []byte) {
 				defer func() { _ = recover() }()
 
@@ -1099,7 +1118,7 @@ func UnionFanout(base gin.HandlerFunc) gin.HandlerFunc {
 				if err != nil {
 					return
 				}
-				// 复制请求头（最小实现：不剔除 hop-by-hop 头；若需更严谨，可过滤 Connection/Keep-Alive 等）
+				// 复制过滤后的请求头
 				for k, vs := range headers {
 					for _, v := range vs {
 						req.Header.Add(k, v)

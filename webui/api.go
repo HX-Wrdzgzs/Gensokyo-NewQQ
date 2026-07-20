@@ -32,6 +32,25 @@ func CombinedMiddleware(api openapi.OpenAPI, apiV2 openapi.OpenAPI) gin.HandlerF
 		if strings.HasPrefix(c.Request.URL.Path, "/webui/api") {
 			// 处理API请求
 			appIDStr := config.GetAppIDStr()
+
+			// 对除 /api/login 和 /api/check-login-status 之外的 API 路径进行 Cookie 认证
+			filepath := c.Param("filepath")
+			isLoginPath := (filepath == "/api/login" && c.Request.Method == http.MethodPost)
+			isCheckLoginPath := (filepath == "/api/check-login-status" && c.Request.Method == http.MethodGet)
+			if !isLoginPath && !isCheckLoginPath {
+				cookieValue, err := c.Cookie("login_cookie")
+				if err != nil {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing authentication cookie"})
+					c.Abort()
+					return
+				}
+				isValid, err := ValidateCookie(cookieValue)
+				if err != nil || !isValid {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired cookie"})
+					c.Abort()
+					return
+				}
+			}
 			//todo 完善logs的 get方法 来获取历史日志
 			// 检查路径是否匹配 `/api/{uin}/process/logs`
 			if strings.HasPrefix(c.Param("filepath"), "/api/") && strings.HasSuffix(c.Param("filepath"), "/process/logs") {

@@ -203,13 +203,14 @@ func (p *Processors) ProcessGroupNormalMessage(data *dto.WSGroupMessageData) err
 			ToMe: toMe,
 		}
 		if !config.GetNativeOb11() {
-			groupMsg.RealMessageType = "group"
-			groupMsg.IsBindedUserId = IsBindedUserId
-			groupMsg.IsBindedGroupId = IsBindedGroupId
-			groupMsg.RealGroupID = data.GroupID
-			groupMsg.RealUserID = data.Author.ID
-			groupMsg.Avatar, _ = GenerateAvatarURLV2(data.Author.ID)
-		}
+		       groupMsg.RealMessageType = "group"
+		       groupMsg.IsBindedUserId = IsBindedUserId
+		       groupMsg.IsBindedGroupId = IsBindedGroupId
+		       groupMsg.RealGroupID = data.GroupID
+		       groupMsg.RealUserID = data.Author.ID
+		       groupMsg.Avatar, _ = GenerateAvatarURLV2(data.Author.ID)
+		      }
+		      groupMsg.IsFullGroupMessage = true
 		// nick/card
 		if CaN := config.GetCardAndNick(); CaN != "" {
 			groupMsg.Sender.Nickname = CaN
@@ -279,11 +280,12 @@ func (p *Processors) ProcessGroupNormalMessage(data *dto.WSGroupMessageData) err
 			Platform: platform,
 		}
 		if !config.GetNativeOb11() {
-			groupMsgS.RealMessageType = "group"
-			groupMsgS.RealGroupID = data.GroupID
-			groupMsgS.RealUserID = data.Author.ID
-			groupMsgS.Avatar, _ = GenerateAvatarURLV2(data.Author.ID)
-		}
+		       groupMsgS.RealMessageType = "group"
+		       groupMsgS.RealGroupID = data.GroupID
+		       groupMsgS.RealUserID = data.Author.ID
+		       groupMsgS.Avatar, _ = GenerateAvatarURLV2(data.Author.ID)
+		      }
+		      groupMsgS.IsFullGroupMessage = true
 		if CaN := config.GetCardAndNick(); CaN != "" {
 			groupMsgS.Sender.Nickname = CaN
 			groupMsgS.Sender.Card = CaN

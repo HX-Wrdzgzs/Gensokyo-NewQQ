@@ -25,10 +25,25 @@ type WebSocketServerClient struct {
 }
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
+  CheckOrigin: func(r *http.Request) bool {
+   // 默认仅允许本地回环地址和配置的 server_dir 域名
+   origin := r.Header.Get("Origin")
+   if origin == "" {
+    return true // 无 Origin 头时放行（兼容非浏览器客户端）
+   }
+   // 允许本地回环
+   if strings.HasPrefix(origin, "http://127.0.0.1") || strings.HasPrefix(origin, "http://localhost") {
+    return true
+   }
+   // 允许配置的 server_dir
+   serverDir := config.GetServer_dir()
+   if serverDir != "" && (strings.Contains(origin, serverDir) || strings.HasPrefix(origin, "https://"+serverDir) || strings.HasPrefix(origin, "http://"+serverDir)) {
+    return true
+   }
+   mylog.Printf("WebSocket Origin 校验失败: %s", origin)
+   return false
+  },
+ }
 
 // 确保WebSocketServerClient实现了interfaces.WebSocketServerClienter接口
 var _ callapi.WebSocketServerClienter = &WebSocketServerClient{}
@@ -70,7 +85,7 @@ func wsHandler(api openapi.OpenAPI, apiV2 openapi.OpenAPI, p *Processor.Processo
 			mylog.Printf("Connection failed due to missing token. Headers: %v", c.Request.Header)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
 		} else {
-			mylog.Printf("Connection failed due to incorrect token. Headers: %v, Provided token: %s", c.Request.Header, token)
+			mylog.Printf("Connection failed due to incorrect token. Headers: %v, Provided token: %s", c.Request.Header, redactToken(token))
 			c.JSON(http.StatusForbidden, gin.H{"error": "Incorrect token"})
 		}
 		return
@@ -170,4 +185,12 @@ func (c *WebSocketServerClient) SendMessage(message map[string]interface{}) erro
 
 func (client *WebSocketServerClient) Close() error {
 	return client.Conn.Close()
+}
+
+// redactToken 对令牌进行脱敏，只显示前 4 位
+func redactToken(s string) string {
+	if len(s) <= 4 {
+		return "****"
+	}
+	return s[:4] + "****"
 }

@@ -1,82 +1,70 @@
-# 统一图床服务
+# 统一图床/OSS 服务
 
-统一图床模块会按配置顺序尝试已启用后端，并返回第一个成功的公开图片 URL。
+图片图床由 `settings.oss_type` 单选。`0~3` 使用原有本机或云 OSS，`4~10` 使用本包的后端；不会同时轮询多个图床。
 
-## 安全默认值
+| oss_type | 后端 | 说明 |
+|---:|---|---|
+| 0 | 本机 | Gensokyo 本地 HTTP 上传（默认） |
+| 1 | 腾讯云 COS | 原有 `t_COS_*` 配置 |
+| 2 | 百度云 BOS | 原有 `b_BOS_*` 配置 |
+| 3 | 阿里云 OSS | 原有 `a_OSS_*` 配置 |
+| 4 | COS 自签 | `cos.*`，需要自行配置凭据 |
+| 5 | Bilibili | `bilibili.*`，需要 Cookie |
+| 6 | QQ频道 | `qq_channel.*`，需要频道 ID 和 Authorization |
+| 7 | ChatGLM | 第三方免配置服务，需显式允许 |
+| 8 | Ukaka | 第三方签名服务，需显式允许 |
+| 9 | 星野 | 第三方签名服务，需显式允许 |
+| 10 | Nature | 已禁用，不再使用公开源码中的内置凭据 |
 
-- Nature 后端已禁用。上游版本曾在公开源码中内置对象存储访问凭据，公开凭据不能继续作为秘密使用。
-- ChatGLM、Ukaka、星野属于第三方免配置服务。即使旧配置中仍为 `enabled: true`，默认也不会上传。
-- 明确接受图片会离开当前服务器并上传到第三方后，才可设置环境变量：
+## 配置示例
+
+```yaml
+oss_type: 0
+cos:
+  secret_id: ""
+  secret_key: ""
+  region: "ap-guangzhou"
+  bucket: ""
+  domain: ""
+bilibili:
+  csrf_token: ""
+  sessdata: ""
+  bucket: "openplatform"
+qq_channel:
+  channel_id: ""
+  token: ""
+```
+
+ChatGLM、Ukaka、星野需要管理员明确接受图片上传到第三方服务后设置：
 
 ```text
 GENSOKYO_ENABLE_THIRD_PARTY_IMAGE_HOSTS=1
 ```
 
-推荐优先使用自行控制的 COS 或 QQ 频道后端。
+## 安全限制
 
-## 配置示例
-
-```yaml
-image_hosting:
-  cos:
-    enabled: false
-    secret_id: ""
-    secret_key: ""
-    region: "ap-guangzhou"
-    bucket: ""
-    domain: ""
-  bilibili:
-    enabled: false
-    csrf_token: ""
-    sessdata: ""
-    bucket: "openplatform"
-  qq_channel:
-    enabled: false
-    channel_id: ""
-    token: ""
-  chatglm:
-    enabled: false
-  ukaka:
-    enabled: false
-  xingye:
-    enabled: false
-  nature:
-    enabled: false
-```
-
-`nature.enabled` 已不再生效，仅为兼容旧配置保留字段。
-
-## 上传限制
-
-统一入口当前执行以下检查：
-
-- 单张图片最大 10 MiB
-- JPEG、PNG、GIF、WebP 文件头检查
-- PNG、JPEG、GIF 实际解码检查
-- 最大 4000 万像素
-- 文件名路径和控制字符清理
-- HTTP 请求总超时 15 秒
-- 第三方响应体最大读取 1 MiB
-
-无法识别或损坏的数据不会再默认按 JPEG 上传。
-
-## 后端说明
-
-| 优先级 | 后端 | 默认状态 | 说明 |
-|---|---|---|---|
-| 1 | COS | 关闭 | 需要自行配置访问凭据和存储桶 |
-| 2 | Bilibili | 关闭 | 需要用户 Cookie，注意账号安全和平台规则 |
-| 3 | QQ频道 | 关闭 | 需要频道 ID 和机器人 Authorization |
-| 4 | ChatGLM | 关闭 | 还需要显式启用第三方图床环境变量 |
-| 5 | Ukaka | 关闭 | 还需要显式启用第三方图床环境变量 |
-| 6 | 星野 | 关闭 | 还需要显式启用第三方图床环境变量 |
-| - | Nature | 禁用 | 不再包含或使用上游公开凭据 |
+- 单张图片最大 10 MiB，最多 4000 万像素。
+- 只接受 PNG、JPEG、GIF、WebP，并检查可解析性。
+- 文件名会移除路径穿越和控制字符。
+- 图床 HTTP 请求总超时 15 秒，响应体最多读取 1 MiB。
+- 只允许 HTTPS 外部 URL，拒绝本机、私有网段和不安全重定向。
+- 已出现在 Git 历史或公开页面中的凭据无法通过一次提交恢复保密性，应立即撤销或轮换。
 
 ## 集成点
 
-- `images/upload_api.go` 中的 `UploadBase64ImageToServer` 会优先尝试图床链，失败后回退传统模式。
-- `handlers/message_parser.go` 中的 `ResolveMarkdownImages` 可使用图床链获取公开 URL。
+- `images/upload_api.go` 根据 `oss_type` 调用 `UploadProvider`。
+- `handlers/message_parser.go` 可使用图床获取公开 URL。
 
-## 运维提醒
+## 目录
 
-已经出现在 Git 历史或公开页面中的凭据无法通过一次代码提交恢复保密性。对应凭据的所有者应立即在云平台撤销或轮换密钥，并检查访问日志与账单。
+```text
+imagehosting/
+├── hosting.go       # provider 调度、校验和 HTTP 辅助函数
+├── cos.go           # 腾讯云 COS 自签
+├── bilibili.go      # B站图床
+├── qq_channel.go    # QQ频道图床
+├── chatglm.go       # ChatGLM
+├── signed.go        # Ukaka + 星野
+├── nature.go        # 已禁用的 Nature 后端
+└── README.md
+```

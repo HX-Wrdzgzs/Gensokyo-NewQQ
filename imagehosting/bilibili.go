@@ -14,8 +14,8 @@ import (
 
 func tryBilibili(data []byte, filename string) (string, error) {
 	cfg := config.GetImageHostingBilibili()
-	if !cfg.Enabled || cfg.Sessdata == "" || cfg.CSRFToken == "" {
-		return "", fmt.Errorf("Bilibili 未配置或未启用")
+	if cfg.Sessdata == "" || cfg.CSRFToken == "" {
+		return "", fmt.Errorf("Bilibili 未配置（请填写 csrf_token 和 sessdata）")
 	}
 
 	filename = ensureExt(filename, data)

@@ -12,6 +12,8 @@
 <qqbot-at-user id="<真实OpenID>" />
 ```
 
+此外，`messageText`（文本段）中的 `[CQ:at,qq=<虚拟用户ID>]` 也会被一并转换，并自动合并到 Markdown 内容头部。这意味着即使 `[CQ:at]` 写在 Markdown JSON 之外（如作为数组段中的 `{"type":"at","data":{"qq":"..."}}`），也能正确渲染为 @ 标签。
+
 ## 写法
 
 ```text

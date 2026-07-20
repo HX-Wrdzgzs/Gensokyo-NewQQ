@@ -926,12 +926,17 @@ func newDBMsgLookup(virtualID string) (string, bool) {
 
 // configAndUserInfoDB 返回 config/UserInfo 桶当前应使用的 DB
 // 迁移完成后返回 identityDB，否则返回旧 db（兼容期）
+// 旧 db 不存在时（新安装）直接返回 identityDB
 func configAndUserInfoDB() *bbolt.DB {
 	if isMigrationComplete() {
 		initNewDBs()
 		return identityDB
 	}
-	return db
+	if db != nil {
+		return db
+	}
+	// 旧 db 不存在（新安装），直接使用 identityDB
+	return identityDB
 }
 
 // startMsgCleanup 启动 msg_id 缓存自动清理协程（每分钟扫描一次）

@@ -1,13 +1,6 @@
 // Package imagehosting 提供统一的图床上传接口。
 //
-// 支持 6 种可用图床后端，按配置顺序依次尝试，第一个成功的返回结果：
-//  1. COS (腾讯云对象存储)
-//  2. Bilibili (B站图床)
-//  3. QQ频道 (通过发消息获取 qpic.cn 链接)
-//  4. ChatGLM (需显式允许第三方免配置图床)
-//  5. Ukaka (需显式允许第三方免配置图床)
-//  6. 星野 (需显式允许第三方免配置图床)
-//
+// 具体使用哪个后端由配置项 oss_type 决定；本包负责 4~10 的图床后端。
 // Nature 后端因上游实现包含公开的内置访问凭据而被禁用。
 package imagehosting
 
@@ -31,104 +24,97 @@ import (
 )
 
 const (
-	maxImageBytes        = 10 << 20 // 10 MiB
-	maxImagePixels int64 = 40_000_000
-	maxResponseBodyBytes = 1 << 20 // 1 MiB
+	maxImageBytes              = 10 << 20 // 10 MiB
+	maxImagePixels       int64 = 40_000_000
+	maxResponseBodyBytes       = 1 << 20 // 1 MiB
 )
 
 var imageHostingHTTPClient = &http.Client{
 	Timeout: 15 * time.Second,
 }
 
-// Upload 解码 base64 图片后按配置优先级依次尝试各图床。
-// 返回公开可访问的图片 URL。
-func Upload(base64Data string, filename string) (string, error) {
-	// 在分配解码缓冲区前先拒绝明显超限的输入。
-	if len(base64Data) > base64.StdEncoding.EncodedLen(maxImageBytes)+4 {
-		return "", fmt.Errorf("图片超过最大限制 %d MiB", maxImageBytes>>20)
-	}
-
-	imageBytes, err := base64.StdEncoding.DecodeString(base64Data)
-	if err != nil {
-		return "", fmt.Errorf("base64 解码失败: %w", err)
-	}
-	return uploadImageData(imageBytes, filename)
-}
-
-// UploadBytes 直接上传 bytes（无需 base64 编解码）。
-func UploadBytes(imageData []byte, filename string) (string, error) {
-	return uploadImageData(imageData, filename)
-}
-
-func uploadImageData(imageData []byte, filename string) (string, error) {
+// UploadProvider 按指定 provider 上传图片。
+// provider 名称与 config.GetOssTypeName(config.OssTypeXXX) 保持一致。
+func UploadProvider(provider string, imageData []byte, filename string) (string, error) {
 	if err := validateImageData(imageData); err != nil {
 		return "", err
 	}
 	filename = ensureExt(filename, imageData)
+	mylog.Printf("图床上传 provider=%s", provider)
 
-	uploaders := []struct {
-		name string
-		fn   func([]byte, string) (string, error)
-	}{
-		{"COS", tryCOS},
-		{"Bilibili", tryBilibili},
-		{"QQChannel", tryQQChannel},
-		{"ChatGLM", tryChatGLM},
-		{"Ukaka", tryUkaka},
-		{"Xingye", tryXingye},
+	var upload func([]byte, string) (string, error)
+	switch provider {
+	case "cos":
+		upload = tryCOS
+	case "bilibili":
+		upload = tryBilibili
+	case "qq_channel":
+		upload = tryQQChannel
+	case "chatglm":
+		if !thirdPartyImageHostsAllowed() {
+			return "", fmt.Errorf("第三方图床未显式启用")
+		}
+		upload = tryChatGLM
+	case "ukaka":
+		if !thirdPartyImageHostsAllowed() {
+			return "", fmt.Errorf("第三方图床未显式启用")
+		}
+		upload = tryUkaka
+	case "xingye":
+		if !thirdPartyImageHostsAllowed() {
+			return "", fmt.Errorf("第三方图床未显式启用")
+		}
+		upload = tryXingye
+	case "nature":
+		upload = tryNature
+	default:
+		return "", fmt.Errorf("未知或不支持的图床 provider: %s", provider)
 	}
 
-	var lastErr error
-	for _, uploader := range uploaders {
-		if !isEnabled(uploader.name) {
-			continue
-		}
-		url, err := uploader.fn(imageData, filename)
-		if err == nil && url != "" {
-			mylog.Printf("图床 [%s] 上传成功", uploader.name)
-			return url, nil
-		}
-		if err != nil {
-			lastErr = err
-			mylog.Printf("图床 [%s] 上传失败: %v", uploader.name, err)
-		}
+	url, err := upload(imageData, filename)
+	if err != nil {
+		return "", err
 	}
-
-	if lastErr != nil {
-		return "", fmt.Errorf("所有已启用图床均上传失败: %w", lastErr)
+	if url == "" {
+		return "", fmt.Errorf("图床 provider %s 返回空 URL", provider)
 	}
-	return "", fmt.Errorf("没有可用的图床后端")
+	return url, nil
 }
 
-// ---------- 配置检查 ----------
-
-func isEnabled(name string) bool {
-	switch name {
-	case "COS":
-		return config.GetImageHostingCOS().Enabled
-	case "Bilibili":
-		return config.GetImageHostingBilibili().Enabled
-	case "QQChannel":
-		return config.GetImageHostingQQChannel().Enabled
-	case "ChatGLM":
-		return thirdPartyImageHostsAllowed() && config.GetImageHostingChatGLM().Enabled
-	case "Ukaka":
-		return thirdPartyImageHostsAllowed() && config.GetImageHostingUkaka().Enabled
-	case "Xingye":
-		return thirdPartyImageHostsAllowed() && config.GetImageHostingXingye().Enabled
+// UploadBase64Provider 解码 base64 后按指定 provider 上传。
+func UploadBase64Provider(provider string, base64Data string, filename string) (string, error) {
+	if len(base64Data) > base64.StdEncoding.EncodedLen(maxImageBytes)+4 {
+		return "", fmt.Errorf("图片超过最大限制 %d MiB", maxImageBytes>>20)
 	}
-	return false
+	imageData, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return "", fmt.Errorf("base64 解码失败: %w", err)
+	}
+	return UploadProvider(provider, imageData, filename)
+}
+
+// Upload 兼容旧接口，按当前 oss_type 名称上传。
+func Upload(base64Data string, filename string) (string, error) {
+	return UploadBase64Provider(config.GetOssTypeName(config.GetOssType()), base64Data, filename)
+}
+
+// UploadBytes 兼容旧接口，按当前 oss_type 名称上传。
+func UploadBytes(imageData []byte, filename string) (string, error) {
+	provider := config.GetOssTypeName(config.GetOssType())
+	if provider == "local" || provider == "unknown" {
+		return "", fmt.Errorf("没有可用的图床后端")
+	}
+	return UploadProvider(provider, imageData, filename)
 }
 
 // thirdPartyImageHostsAllowed 要求管理员明确允许无需凭据的第三方上传服务。
-// 这可以保护仍沿用旧版 enabled: true 配置的用户，避免升级后静默外传图片。
+// 这可以保护仍沿用旧版配置的用户，避免升级后静默外传图片。
 func thirdPartyImageHostsAllowed() bool {
 	value := strings.TrimSpace(os.Getenv("GENSOKYO_ENABLE_THIRD_PARTY_IMAGE_HOSTS"))
 	return value == "1" || strings.EqualFold(value, "true") || strings.EqualFold(value, "yes")
 }
 
-// ---------- 输入校验 ----------
-
+// validateImageData 校验大小、文件头、图像尺寸和可解析性。
 func validateImageData(data []byte) error {
 	if len(data) == 0 {
 		return fmt.Errorf("图片数据为空")
@@ -236,8 +222,6 @@ func readClose(resp *http.Response) ([]byte, error) {
 	}
 	return body, nil
 }
-
-// ---------- 文件名处理 ----------
 
 // ensureExt 清理文件名并确保扩展名与实际图片格式一致。
 func ensureExt(filename string, data []byte) string {

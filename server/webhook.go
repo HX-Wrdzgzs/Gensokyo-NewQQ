@@ -188,7 +188,7 @@ func validateSignature(req *http.Request, publicKey ed25519.PublicKey) error {
 func (wh *WebhookHandler) ListenAndProcessMessages() {
 	for payload := range wh.messageQueue {
 		go func(p *WebhookPayload) {
-			mylog.Printf("Processing Webhook event with token: %s", p.PlainToken)
+			mylog.Printf("Processing Webhook event with token: %s", redactToken(p.PlainToken))
 			// 业务逻辑处理的地方
 			payload := &dto.WSPayload{}
 			if err := json.Unmarshal(p.RawMessage, payload); err != nil {

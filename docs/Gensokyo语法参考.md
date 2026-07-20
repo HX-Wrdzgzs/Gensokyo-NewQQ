@@ -34,3 +34,14 @@
 | `avatar` | `qq` | 等同 `[CQ:avatar]`。 |
 | `active` | `type`, `sub_type` | 解析后不写入文本。 |
 | `member` | `type`, `group_id`, `user_id` | 等同 `[CQ:member]`。 |
+
+## Markdown 图片尺寸
+
+Gensokyo 支持 QQ 官方 Markdown 的图片尺寸语法：
+
+```markdown
+![#100px](图片链接)        # 宽度 100px，高度自适应
+![#100px #100px](图片链接)  # 宽高均为 100px
+```
+
+详见 [Markdown 消息文档](./文档-markdown消息.md)。
